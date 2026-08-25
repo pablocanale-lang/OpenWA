@@ -23,6 +23,8 @@ const ApiKeys = lazy(() => import('./pages/ApiKeys').then(m => ({ default: m.Api
 const MessageTester = lazy(() => import('./pages/MessageTester').then(m => ({ default: m.MessageTester })));
 const Infrastructure = lazy(() => import('./pages/Infrastructure').then(m => ({ default: m.Infrastructure })));
 const Plugins = lazy(() => import('./pages/Plugins'));
+const Kampro = lazy(() => import('./pages/Kampro').then(m => ({ default: m.Kampro })));
+const Orders = lazy(() => import('./pages/Orders').then(m => ({ default: m.Orders })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -112,6 +114,9 @@ function AppContent() {
               <Route index element={<Dashboard />} />
               <Route path="sessions" element={<Sessions />} />
               <Route path="chats" element={<Chats />} />
+              <Route path="orders" element={<Orders />} />
+              <Route path="imports" element={<Kampro />} />
+              <Route path="kampro" element={<Navigate to="/imports" replace />} />
               <Route path="webhooks" element={<Webhooks />} />
               <Route path="templates" element={<Templates />} />
               {role === 'admin' && <Route path="api-keys" element={<ApiKeys />} />}

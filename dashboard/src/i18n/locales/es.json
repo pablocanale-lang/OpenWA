@@ -63,7 +63,9 @@
     "infrastructure": "Infraestructura",
     "plugins": "Plugins",
     "logs": "Registros",
-    "templates": "Plantillas"
+    "templates": "Plantillas",
+    "imports": "Importación",
+    "orders": "Pedidos"
   },
   "chats": {
     "media": {
@@ -100,8 +102,11 @@
     "yesterday": "Ayer",
     "attachTitle": "Enviar archivo / imagen",
     "emojiTitle": "Elegir emoji",
+    "templateTitle": "Plantillas",
+    "templateEmpty": "No hay plantillas en esta sesión. Creálas en Plantillas.",
+    "templateNoMatch": "Ninguna plantilla coincide con /{{query}}",
     "captionPlaceholder": "Añadir un pie de foto...",
-    "messagePlaceholder": "Escribe un mensaje...",
+    "messagePlaceholder": "Escribe un mensaje o /precio...",
     "noPermission": "No tienes permiso para enviar mensajes",
     "send": "Enviar",
     "placeholderTitle": "Empieza a escribir",
@@ -642,6 +647,7 @@
     "createTitle": "Crear plantilla",
     "editTitle": "Editar plantilla",
     "newTemplate": "Nueva plantilla",
+    "chatShortcut": "En el chat escribí / y el nombre, por ejemplo /precio o /imagen, y se completa el recuadro.",
     "createTemplate": "Crear plantilla",
     "saveChanges": "Guardar cambios",
     "viewOnly": "Solo lectura",
@@ -970,5 +976,168 @@
       "current": "Esta sesión"
     },
     "loading": "Buscando…"
+  },
+  "kampro": {
+    "title": "Importación",
+    "subtitle": "Importación y abastecimiento de herramientas agropecuarias. El stock se actualiza al registrar una recepción.",
+    "connected": "Conectado",
+    "offline": "API desconectada",
+    "offlineHint": "Arrancá la API de Kampro (start-kampro.bat) con OpenWA en marcha. Esta pantalla vive dentro del dashboard de OpenWA.",
+    "todoStock": "Las reglas de reposición todavía no están definidas y no se implementan.",
+    "costHint": "Los costos sin compra asociada se prorratean por cantidad entre las compras del envío.",
+    "receiveHint": "La cantidad recibida entra a stock. Las unidades DANADO no. Si hay diferencia vs lo comprado y no cargás incidencia, se genera sola.",
+    "reportNote": "El total en PYG solo aparece cuando cada línea está en PYG o tiene tipo de cambio. No se inventa FX.",
+    "prorate": "Prorrateo del envío",
+    "tabs": {
+      "products": "Productos",
+      "suppliers": "Proveedores",
+      "purchases": "Compras",
+      "shipments": "Envíos",
+      "costs": "Costos de importación",
+      "receptions": "Recepción",
+      "report": "Costo SKU"
+    },
+    "stats": {
+      "skus": "SKUs",
+      "stock": "Unidades en stock",
+      "purchases": "Compras",
+      "shipments": "Envíos",
+      "purchased": "Comprado"
+    },
+    "col": {
+      "sku": "SKU",
+      "name": "Nombre",
+      "capacity": "Capacidad",
+      "stock": "Stock",
+      "unitCost": "Costo unit. (PYG)",
+      "country": "País",
+      "contact": "Contacto",
+      "alibaba": "Alibaba",
+      "date": "Fecha",
+      "supplier": "Proveedor",
+      "qty": "Cant.",
+      "unit": "Precio unitario",
+      "total": "Total",
+      "fx": "FX a PYG",
+      "shipment": "Envío",
+      "forwarder": "Forwarder",
+      "status": "Estado",
+      "departed": "Salida",
+      "eta": "ETA",
+      "arrived": "Llegada",
+      "type": "Tipo",
+      "amount": "Monto",
+      "allocation": "Asignación",
+      "received": "Recibido",
+      "incidents": "Incidencias",
+      "landed": "Costo real PYG"
+    },
+    "form": {
+      "createSupplier": "Agregar proveedor",
+      "createPurchase": "Registrar compra",
+      "createForwarder": "Agregar forwarder",
+      "createShipment": "Registrar envío",
+      "createCost": "Cargar costo",
+      "createReception": "Registrar recepción",
+      "assignPurchase": "Compra",
+      "none": "Ninguna",
+      "description": "Descripción"
+    },
+    "toast": {
+      "created": "Guardado",
+      "received": "Recepción registrada — stock actualizado",
+      "error": "No se pudo guardar"
+    }
+  },
+  "orders": {
+    "openPanel": "Pedido",
+    "panelTitle": "Armar pedido",
+    "panelHint": "Armá el pedido junto al chat. Aparece en Pedidos al instante.",
+    "currentHint": "Este contacto ya tiene un pedido. Completá datos o avanzá la etapa acá.",
+    "subtitle": "Lista de pedidos. Filtrá por etapa; la fecha se registra sola al crear.",
+    "offlineHint": "Arrancá la API de Kampro (start-kampro.bat) con OpenWA en marcha.",
+    "emptyColumn": "Sin pedidos",
+    "emptyFiltered": "Ningún pedido en esta etapa",
+    "locationRequestBody": "Hola, para coordinar el delivery necesitamos tu ubicación. Por favor compartí tu pin de WhatsApp (adjuntar ubicación).",
+    "locationCaptured": "Ubicación capturada",
+    "askLocation": "Pedir ubicación",
+    "create": "Crear pedido",
+    "saveData": "Guardar datos",
+    "cancelConfirm": "Este pedido aún no se pagó. ¿Cancelarlo?",
+    "confirmPay": "Confirmar pago",
+    "discountHint": "No hay regla de descuento para esta cantidad: dejá 0 o cargá un % a mano.",
+    "noCatalogPrice": "Este SKU no tiene precio de venta. Cargá el precio unitario o el monto a pagar.",
+    "noPhone": "No se pudo leer el teléfono de este contacto.",
+    "codHint": "En Asunción el cobro es siempre contraentrega. Se confirma en la entrega.",
+    "prepaidHint": "Interior (encomienda) no se despacha sin transferencia confirmada.",
+    "fields": {
+      "sku": "SKU",
+      "qty": "Cantidad",
+      "discount": "Descuento %",
+      "unitPrice": "Precio unitario (Gs)",
+      "total": "Monto a pagar (Gs)",
+      "phone": "Teléfono",
+      "zone": "Zona",
+      "maps": "Ubicación en Maps",
+      "mapsPlaceholder": "Pin de WhatsApp o pegá un link de Maps",
+      "recipient": "Nombre de quien recibe",
+      "invoiceName": "Nombre para factura",
+      "ruc": "RUC",
+      "preferredTime": "Horario de preferencia",
+      "payMethod": "Medio de pago",
+      "city": "Ciudad",
+      "carrier": "Transportadora",
+      "reference": "Comprobante / referencia"
+    },
+    "zone": {
+      "asuncion": "Asunción y alrededores",
+      "interior": "Interior"
+    },
+    "pay": {
+      "cash": "Efectivo",
+      "transfer": "Transferencia"
+    },
+    "status": {
+      "CONFIRMADO": "Confirmado",
+      "PENDIENTE_DE_PAGO": "Pendiente de pago",
+      "PAGO_CONFIRMADO": "Pago confirmado",
+      "LISTO_PARA_DESPACHO": "Listo para despacho",
+      "ENVIADO": "Enviado",
+      "ENTREGADO": "Entregado",
+      "CERRADO": "Cerrado",
+      "CANCELADO": "Cancelado"
+    },
+    "actions": {
+      "confirmPayment": "Confirmar pago",
+      "markReady": "Marcar listo para despacho",
+      "markShipped": "Marcar enviado",
+      "markDelivered": "Marcar entregado",
+      "close": "Cerrar pedido",
+      "cancel": "Cancelar"
+    },
+    "toast": {
+      "created": "Pedido creado",
+      "updated": "Datos guardados",
+      "advanced": "Pedido actualizado",
+      "cancelled": "Pedido cancelado",
+      "error": "No se pudo guardar el pedido",
+      "locationAsked": "Pedido de ubicación enviado"
+    },
+    "filterAll": "Todos",
+    "tab": {
+      "current": "Pedido actual",
+      "new": "Nuevo"
+    },
+    "col": {
+      "date": "Fecha",
+      "client": "Cliente",
+      "amount": "Monto (Gs)",
+      "stage": "Etapa",
+      "action": "Acción"
+    },
+    "zoneShort": {
+      "asuncion": "Asunción",
+      "interior": "Interior"
+    }
   }
 }

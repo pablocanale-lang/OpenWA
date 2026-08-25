@@ -26,6 +26,7 @@ export default defineConfig({
   },
   server: {
     port: 2886,
+    host: '127.0.0.1',
     proxy: {
       '/api': {
         target: 'http://localhost:2785',
@@ -38,6 +39,11 @@ export default defineConfig({
         target: 'http://localhost:2785',
         ws: true,
         changeOrigin: true,
+      },
+      '/kampro-api': {
+        target: 'http://127.0.0.1:3100',
+        changeOrigin: true,
+        rewrite: path => path.replace(/^\/kampro-api/, ''),
       },
     },
   },

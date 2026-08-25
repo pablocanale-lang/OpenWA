@@ -182,7 +182,7 @@ export function Templates() {
     <div className="templates-page">
       <PageHeader
         title={t('templates.title')}
-        subtitle={t('templates.subtitle')}
+        subtitle={`${t('templates.subtitle')} ${t('templates.chatShortcut')}`}
         actions={
           <select
             className="templates-session-select"

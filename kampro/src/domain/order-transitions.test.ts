@@ -1,0 +1,108 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  assertOrderTransition,
+  initialStatusForZone,
+  nextStatusForAction,
+  primaryActionFor,
+} from './order-transitions.js';
+
+describe('initialStatusForZone', () => {
+  it('Asunción arranca en CONFIRMADO (contraentrega)', () => {
+    assert.equal(initialStatusForZone('ASUNCION'), 'CONFIRMADO');
+  });
+
+  it('Interior arranca en PENDIENTE_DE_PAGO', () => {
+    assert.equal(initialStatusForZone('INTERIOR'), 'PENDIENTE_DE_PAGO');
+  });
+});
+
+describe('assertOrderTransition', () => {
+  it('Asunción puede ir de CONFIRMADO a listo para despacho con pago pendiente', () => {
+    assert.doesNotThrow(() =>
+      assertOrderTransition({
+        zone: 'ASUNCION',
+        status: 'CONFIRMADO',
+        action: 'markReady',
+        hasConfirmedPayment: false,
+      }),
+    );
+    assert.equal(nextStatusForAction('markReady'), 'LISTO_PARA_DESPACHO');
+  });
+
+  it('Interior no puede despachar sin pago confirmado', () => {
+    assert.throws(
+      () =>
+        assertOrderTransition({
+          zone: 'INTERIOR',
+          status: 'PAGO_CONFIRMADO',
+          action: 'markReady',
+          hasConfirmedPayment: false,
+        }),
+      /pago adelantado/,
+    );
+  });
+
+  it('Interior confirma pago desde PENDIENTE_DE_PAGO', () => {
+    assert.equal(primaryActionFor('INTERIOR', 'PENDIENTE_DE_PAGO'), 'confirmPayment');
+    assert.doesNotThrow(() =>
+      assertOrderTransition({
+        zone: 'INTERIOR',
+        status: 'PENDIENTE_DE_PAGO',
+        action: 'confirmPayment',
+        hasConfirmedPayment: false,
+      }),
+    );
+  });
+
+  it('Asunción no usa confirmar pago adelantado', () => {
+    assert.throws(
+      () =>
+        assertOrderTransition({
+          zone: 'ASUNCION',
+          status: 'CONFIRMADO',
+          action: 'confirmPayment',
+          hasConfirmedPayment: false,
+        }),
+      /inválida/,
+    );
+  });
+
+  it('se puede cancelar un Interior pendiente de pago', () => {
+    assert.doesNotThrow(() =>
+      assertOrderTransition({
+        zone: 'INTERIOR',
+        status: 'PENDIENTE_DE_PAGO',
+        action: 'cancel',
+        hasConfirmedPayment: false,
+      }),
+    );
+    assert.equal(nextStatusForAction('cancel'), 'CANCELADO');
+  });
+
+  it('no se cancela si ya hay pago confirmado', () => {
+    assert.throws(
+      () =>
+        assertOrderTransition({
+          zone: 'INTERIOR',
+          status: 'PAGO_CONFIRMADO',
+          action: 'cancel',
+          hasConfirmedPayment: true,
+        }),
+      /aún no se pagó/,
+    );
+  });
+
+  it('no se cancela un pedido ya enviado', () => {
+    assert.throws(
+      () =>
+        assertOrderTransition({
+          zone: 'ASUNCION',
+          status: 'ENVIADO',
+          action: 'cancel',
+          hasConfirmedPayment: false,
+        }),
+      /aún no se pagó/,
+    );
+  });
+});

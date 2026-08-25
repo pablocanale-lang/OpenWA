@@ -273,6 +273,7 @@ export interface ChatMessage {
     quotedMessage?: { id: string; body: string };
     reactions?: Record<string, string>;
     call?: { video: boolean; missed: boolean };
+    location?: { latitude: number; longitude: number; description?: string; address?: string; url?: string };
   };
 }
 

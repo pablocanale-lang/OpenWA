@@ -1,0 +1,198 @@
+.orders-page {
+  padding: 2rem;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: calc(100vh - 4rem);
+}
+
+.orders-page .status-badge {
+  padding: 0.375rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.orders-page .status-badge.connected {
+  background: rgba(37, 211, 102, 0.1);
+  color: var(--primary-text);
+}
+
+.orders-page .status-badge.offline {
+  background: var(--bg-light);
+  color: var(--text-muted);
+}
+
+.orders-offline,
+.orders-loading {
+  background: var(--bg-white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  color: var(--text-secondary);
+}
+
+.orders-loading {
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+}
+
+.orders-tabs {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.orders-tab {
+  border: 1px solid var(--border);
+  background: var(--bg-white);
+  color: var(--text-secondary);
+  border-radius: 9999px;
+  padding: 0.45rem 0.95rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.orders-tab.active {
+  background: rgba(37, 211, 102, 0.12);
+  border-color: rgba(37, 211, 102, 0.45);
+  color: var(--primary-text);
+}
+
+.orders-empty {
+  margin: 0;
+  padding: 1.25rem;
+  color: var(--text-muted);
+  background: var(--bg-white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.orders-page .table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-white);
+  box-shadow: var(--shadow-sm);
+}
+
+.orders-page table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.orders-page th {
+  background: var(--bg-light);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.7rem 0.75rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.orders-page td {
+  padding: 0.7rem 0.75rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.orders-page tbody tr:hover {
+  background: rgba(37, 211, 102, 0.05);
+}
+
+.orders-page th:last-child,
+.orders-page td:last-child {
+  position: sticky;
+  right: 0;
+  box-shadow: -8px 0 12px -8px rgba(0, 0, 0, 0.35);
+}
+
+.orders-page th:last-child {
+  background: var(--bg-light);
+}
+
+.orders-page td:last-child {
+  background: var(--bg-white);
+}
+
+.orders-page tbody tr:hover td:last-child {
+  background: var(--bg-white);
+}
+
+.order-zone {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.15rem 0.4rem;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.order-zone.asuncion {
+  background: rgba(37, 211, 102, 0.12);
+  color: var(--primary-text);
+}
+
+.order-zone.interior {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+}
+
+.orders-page td .btn-primary,
+.orders-page td .btn-danger {
+  white-space: nowrap;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.75rem;
+}
+
+.orders-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.order-stage {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.orders-pay-form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.orders-pay-form label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.orders-pay-form input,
+.orders-pay-form select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--bg-white);
+}
+
+@media (max-width: 720px) {
+  .orders-page {
+    padding: 1.25rem;
+  }
+}

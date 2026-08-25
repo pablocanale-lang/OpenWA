@@ -63,7 +63,9 @@
     "messageTester": "మెసేజ్ టెస్టర్",
     "infrastructure": "ఇన్‌ఫ్రాస్ట్రక్చర్",
     "plugins": "ప్లగిన్స్",
-    "logs": "లాగ్స్"
+    "logs": "లాగ్స్",
+    "imports": "దిగుమతి",
+    "orders": "ఆర్డర్లు"
   },
   "chats": {
     "media": {
@@ -168,7 +170,10 @@
       "delivered": "డెలివరీ అయింది",
       "read": "చదవబడింది",
       "failed": "విఫలమైంది"
-    }
+    },
+    "templateTitle": "Templates",
+    "templateEmpty": "No templates in this session. Create them under Templates.",
+    "templateNoMatch": "No template matches /{{query}}"
   },
   "errorBoundary": {
     "title": "ఏదో తప్పు జరిగింది",
@@ -506,7 +511,8 @@
       "deleteFailed": "టెంప్లేట్ తొలగించడం విఫలమైంది: {{message}}",
       "copied": "టెంప్లేట్ పేరు కాపీ చేయబడింది"
     },
-    "sessionSelect": "సెషన్"
+    "sessionSelect": "సెషన్",
+    "chatShortcut": "In chat, type / and the name, e.g. /price or /image, to fill the compose box."
   },
   "apiKeys": {
     "title": "API కీలు",
@@ -970,5 +976,168 @@
       "current": "ఈ సెషన్"
     },
     "loading": "శోధిస్తోంది…"
+  },
+  "kampro": {
+    "title": "దిగుమతి",
+    "subtitle": "Import and supply for agricultural tools. Stock updates when a reception is registered.",
+    "connected": "Connected",
+    "offline": "API offline",
+    "offlineHint": "Start the Kampro API (start-kampro.bat) while OpenWA is running. This screen stays inside the OpenWA dashboard.",
+    "todoStock": "Reorder rules are not defined yet and are not implemented.",
+    "costHint": "Costs without a purchase are prorated by quantity across the shipment.",
+    "receiveHint": "Received quantity enters stock. Damaged units (DANADO) do not. A quantity mismatch creates an incident if you do not add one.",
+    "reportNote": "PYG totals appear only when each line is in PYG or has an exchange rate. FX is never invented.",
+    "prorate": "Prorated across shipment",
+    "tabs": {
+      "products": "Products",
+      "suppliers": "Suppliers",
+      "purchases": "Purchases",
+      "shipments": "Shipments",
+      "costs": "Import costs",
+      "receptions": "Receiving",
+      "report": "SKU cost"
+    },
+    "stats": {
+      "skus": "SKUs",
+      "stock": "Units in stock",
+      "purchases": "Purchases",
+      "shipments": "Shipments",
+      "purchased": "Purchased"
+    },
+    "col": {
+      "sku": "SKU",
+      "name": "Name",
+      "capacity": "Capacity",
+      "stock": "Stock",
+      "unitCost": "Unit cost (PYG)",
+      "country": "Country",
+      "contact": "Contact",
+      "alibaba": "Alibaba",
+      "date": "Date",
+      "supplier": "Supplier",
+      "qty": "Qty",
+      "unit": "Unit price",
+      "total": "Total",
+      "fx": "FX to PYG",
+      "shipment": "Shipment",
+      "forwarder": "Forwarder",
+      "status": "Status",
+      "departed": "Departed",
+      "eta": "ETA",
+      "arrived": "Arrived",
+      "type": "Type",
+      "amount": "Amount",
+      "allocation": "Allocation",
+      "received": "Received",
+      "incidents": "Incidents",
+      "landed": "Landed PYG"
+    },
+    "form": {
+      "createSupplier": "Add supplier",
+      "createPurchase": "Register purchase",
+      "createForwarder": "Add forwarder",
+      "createShipment": "Register shipment",
+      "createCost": "Add import cost",
+      "createReception": "Register reception",
+      "assignPurchase": "Purchase",
+      "none": "None",
+      "description": "Description"
+    },
+    "toast": {
+      "created": "Saved",
+      "received": "Received — stock updated",
+      "error": "Could not save"
+    }
+  },
+  "orders": {
+    "openPanel": "Order",
+    "panelTitle": "Quick order",
+    "panelHint": "Build the order next to this chat. It appears on Pedidos immediately.",
+    "currentHint": "This contact already has an order. Fill missing data or update the stage here.",
+    "subtitle": "Order list. Filter by stage; the date is set automatically on create.",
+    "offlineHint": "Start the Kampro API (start-kampro.bat) while OpenWA is running.",
+    "emptyColumn": "No orders",
+    "emptyFiltered": "No orders in this stage",
+    "locationRequestBody": "Hola, para coordinar el delivery necesitamos tu ubicación. Por favor compartí tu pin de WhatsApp (adjuntar ubicación).",
+    "locationCaptured": "Location captured",
+    "askLocation": "Ask for location",
+    "create": "Create order",
+    "saveData": "Save details",
+    "cancelConfirm": "This order has not been paid yet. Cancel it?",
+    "confirmPay": "Confirm payment",
+    "discountHint": "No discount rule for this quantity — leave at 0 or type a manual %.",
+    "noCatalogPrice": "This SKU has no sale price yet. Enter the unit price or the amount to pay.",
+    "noPhone": "Could not read this contact’s phone number.",
+    "codHint": "Asunción is always cash on delivery. Payment is confirmed at delivery.",
+    "prepaidHint": "Interior (encomienda) cannot ship until a transfer is confirmed.",
+    "fields": {
+      "sku": "SKU",
+      "qty": "Quantity",
+      "discount": "Discount %",
+      "unitPrice": "Unit price (Gs)",
+      "total": "Amount to pay (Gs)",
+      "phone": "Phone",
+      "zone": "Zone",
+      "maps": "Maps location",
+      "mapsPlaceholder": "Pin from WhatsApp or paste a Maps link",
+      "recipient": "Recipient name",
+      "invoiceName": "Invoice name",
+      "ruc": "RUC",
+      "preferredTime": "Preferred time",
+      "payMethod": "Payment method",
+      "city": "City",
+      "carrier": "Carrier",
+      "reference": "Receipt / reference"
+    },
+    "zone": {
+      "asuncion": "Asunción and surroundings",
+      "interior": "Interior"
+    },
+    "pay": {
+      "cash": "Cash",
+      "transfer": "Transfer"
+    },
+    "status": {
+      "CONFIRMADO": "Confirmed",
+      "PENDIENTE_DE_PAGO": "Pending payment",
+      "PAGO_CONFIRMADO": "Payment confirmed",
+      "LISTO_PARA_DESPACHO": "Ready to ship",
+      "ENVIADO": "Shipped",
+      "ENTREGADO": "Delivered",
+      "CERRADO": "Closed",
+      "CANCELADO": "Cancelled"
+    },
+    "actions": {
+      "confirmPayment": "Confirm payment",
+      "markReady": "Mark ready to ship",
+      "markShipped": "Mark shipped",
+      "markDelivered": "Mark delivered",
+      "close": "Close order",
+      "cancel": "Cancel"
+    },
+    "toast": {
+      "created": "Order created",
+      "updated": "Details saved",
+      "advanced": "Order updated",
+      "cancelled": "Order cancelled",
+      "error": "Could not save the order",
+      "locationAsked": "Location request sent"
+    },
+    "filterAll": "All",
+    "tab": {
+      "current": "Current order",
+      "new": "New"
+    },
+    "col": {
+      "date": "Date",
+      "client": "Customer",
+      "amount": "Amount (Gs)",
+      "stage": "Stage",
+      "action": "Action"
+    },
+    "zoneShort": {
+      "asuncion": "Asunción",
+      "interior": "Interior"
+    }
   }
 }

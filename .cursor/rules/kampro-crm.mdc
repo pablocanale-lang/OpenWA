@@ -1,0 +1,75 @@
+---
+description: Contexto de negocio, modelo de datos y reglas de Kampro CRM sobre OpenWA. Aplicar en cada módulo.
+alwaysApply: true
+---
+
+# Kampro CRM sobre OpenWA
+
+Kampro vende al por menor herramientas agropecuarias/ganaderas en Paraguay. Importa desde China (Alibaba + forwarder). Captación 100% digital: Meta Ads → WhatsApp corporativo (esta instancia OpenWA). Sin tienda física ni pickup.
+
+El CRM es una **capa encima de OpenWA**, no un fork del core. OpenWA solo gateway (mensajes, webhooks, API). Persistencia Kampro **propia**, vinculada por **teléfono**. Número nuevo → crear Lead. Número existente → actualizar Lead o Cliente.
+
+No generar código hasta que el usuario pida un módulo concreto. Cada módulo (Importación, Captación, Meta Ads, Pedidos, Entrega, Pagos, Facturación, Clientes, Reportes) debe ser consistente con este modelo. No inventar políticas listadas como TODO.
+
+## SKUs (cada variante es independiente)
+
+1. Jeringa dosificadora 50 ml — cuerpo metálico, depósito plástico duro
+2. Jeringa automática 2 ml
+3. Jeringa automática 5 ml
+
+## Reglas comerciales (no improvisar)
+
+- Pedidos habituales: 1–8 unidades; el más pedido es 2.
+- 15% de descuento **solo** al pedir 2 unidades.
+- 3–8 unidades: sin descuento definido → no inventar.
+- Precio siempre **incluye envío**; el cliente nunca paga flete aparte.
+- Entrega mutuamente excluyente:
+  - **Encomienda** (fuera de Asunción): pago 100% anticipado por transferencia; no despachar sin pago confirmado.
+  - **Delivery** (Asunción): transferencia o efectivo; admite contraentrega; puede avanzar a LISTO PARA DESPACHO / ENVIADO con cobro pendiente.
+- Toda venta se factura. Delivery: factura junto al producto. Encomienda: foto de factura al cliente **antes** del envío.
+
+## Modelo maestro
+
+- **Lead**: teléfono, nombre (si hay), fecha ingreso, campaña, anuncio/creativo, placement (ej. Facebook Feed), producto consultado, estado, última interacción, próxima acción.
+- **Cliente**: nombre completo, teléfono, cédula (si corresponde), RUC (si corresponde), historial de pedidos. Se crea desde Lead cuando el pedido **se completa**.
+- **Pedido**: producto/variante, cantidad, descuento, total, modalidad entrega, estado pago, estado despacho, factura asociada.
+- **Pago**: monto, medio (transferencia/efectivo), fecha, estado, comprobante/referencia.
+- **Entrega**: tipo (delivery/encomienda), datos según tipo, agencia (encomienda), fecha, estado.
+- **Factura**: número/referencia, fecha, RUC, estado, copia/foto cuando corresponda.
+- **Campaña/Ads**: campaña, anuncio, placement, fecha, métricas (cuando se integren).
+- **Producto**: SKU, nombre, capacidad, costo, precio, stock, estado.
+- **Proveedor/Compra**: proveedor, producto, cantidad, precio, forwarder, costos, fechas, recepción.
+
+### Lead
+
+`NUEVO → EN CONVERSACIÓN → PEDIDO CONFIRMADO → PENDIENTE DE DATOS → PENDIENTE DE PAGO → CONVERTIDO | NO CONVERTIDO`
+
+### Pedido
+
+`BORRADOR → CONFIRMADO → PENDIENTE DE PAGO → PAGO CONFIRMADO → LISTO PARA DESPACHO → ENVIADO → ENTREGADO → CERRADO`
+
+Encomienda: `PAGO CONFIRMADO` obligatorio antes de `LISTO PARA DESPACHO`. Delivery contraentrega: puede despachar con pago pendiente.
+
+### Datos obligatorios
+
+- Todo pedido: producto, cantidad, modalidad, teléfono, datos de facturación.
+- Encomienda: cédula, teléfono, nombre completo, destino, agencia preferida, fecha de envío, pago previo confirmado.
+- Delivery Asunción: datos para coordinar, forma de pago, estado de cobro. Dirección exacta = TODO (no estandarizar de más).
+- Facturación: RUC cuando corresponda + campos del sistema fiscal (TODO).
+
+## TODO de negocio (marcar, no resolver)
+
+- Stock: dónde se registra, cómo se descuenta, responsable.
+- Campos exactos de dirección/localización delivery Asunción.
+- Proveedor de delivery local y agencias de encomienda habituales.
+- Verificación de transferencias y quién confirma pagos.
+- Sistema de facturación y campos fiscales obligatorios.
+- Seguimiento de leads que consultan y no confirman.
+- Cancelaciones, devoluciones, cambios, garantías, defectuosos.
+- Mayorista (>8 unidades) y descuentos fuera del 15% por 2 unidades.
+
+## Integración OpenWA
+
+- Escuchar eventos/webhooks; responder y enviar archivos (p. ej. foto de factura) vía API.
+- No modificar `src/` del core de OpenWA salvo que el usuario lo pida explícitamente.
+- Kampro vive como capa aparte (app/plugin/servicio), no mezclar tablas con sesiones/mensajes de OpenWA.

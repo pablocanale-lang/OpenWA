@@ -1,0 +1,11 @@
+# Overlay local: usa la imagen publicada (la misma que producción) sobre
+# docker-compose.dev.yml (SQLite + bind mount ./data).
+#
+#   docker compose -f docker-compose.dev.yml -f docker-compose.local.yml up -d --no-build
+#
+# Para probar cambios de código local, omití este archivo y usá --build.
+
+services:
+  openwa:
+    image: ghcr.io/rmyndharis/openwa:0.23.3
+    pull_policy: missing

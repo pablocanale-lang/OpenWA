@@ -1,0 +1,295 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Catálogo (cada variante es un SKU independiente) ───────────────────────
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Product {
+  id           String        @id @default(cuid())
+  sku          String        @unique
+  name         String
+  capacityMl   Int
+  /// Precio de venta en PYG. Null hasta que el módulo comercial lo defina — no inventar.
+  unitPricePyg Int?
+  /// Último costo unitario en PYG cuando hay equivalencia (compra+importación con FX o moneda PYG).
+  unitCostPyg  Int?
+  stockQty     Int           @default(0)
+  status       ProductStatus @default(ACTIVE)
+  /// TODO negocio: criterio de reposición. No usar todavía.
+  reorderPoint Int?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  suppliers      SupplierProduct[]
+  purchases      Purchase[]
+  stockMovements StockMovement[]
+}
+
+// ─── Importación y abastecimiento ───────────────────────────────────────────
+
+enum ShipmentStatus {
+  COORDINADO
+  EN_TRANSITO
+  LLEGADO
+  RECEPCIONADO
+}
+
+enum ImportCostType {
+  LOGISTICA
+  ADUANA
+  IMPUESTO
+  OTRO
+}
+
+enum ReceptionIncidentType {
+  FALTANTE
+  SOBRANTE
+  DANADO
+  OTRO
+}
+
+enum StockMovementReason {
+  RECEPCION
+  AJUSTE
+}
+
+model Supplier {
+  id         String   @id @default(cuid())
+  name       String
+  contact    String?
+  country    String   @default("CN")
+  alibabaUrl String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  products  SupplierProduct[]
+  purchases Purchase[]
+}
+
+model SupplierProduct {
+  supplierId String
+  productId  String
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@id([supplierId, productId])
+}
+
+model Forwarder {
+  id        String   @id @default(cuid())
+  name      String
+  contact   String?
+  country   String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shipments Shipment[]
+}
+
+model Purchase {
+  id          String   @id @default(cuid())
+  purchasedAt DateTime
+  productId   String
+  supplierId  String
+  shipmentId  String?
+  quantity    Int
+  unitPrice   Decimal
+  total       Decimal
+  currency    String   @default("USD")
+  /// Tipo de cambio a PYG al momento de registrar (opcional). No se inventa.
+  fxRateToPyg Decimal?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  product    Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  supplier   Supplier     @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  shipment   Shipment?    @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
+  costs      ImportCost[]
+  receptions Reception[]
+
+  @@index([productId])
+  @@index([supplierId])
+  @@index([shipmentId])
+  @@index([purchasedAt])
+}
+
+model Shipment {
+  id          String         @id @default(cuid())
+  forwarderId String
+  reference   String
+  departedAt  DateTime?
+  etaAt       DateTime?
+  arrivedAt   DateTime?
+  status      ShipmentStatus @default(COORDINADO)
+  notes       String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  forwarder  Forwarder    @relation(fields: [forwarderId], references: [id], onDelete: Restrict)
+  purchases  Purchase[]
+  costs      ImportCost[]
+  receptions Reception[]
+
+  @@unique([reference])
+  @@index([forwarderId])
+  @@index([status])
+}
+
+model ImportCost {
+  id          String         @id @default(cuid())
+  shipmentId  String
+  /// Si está set, el costo es de esa compra; si no, se prorratea entre las compras del envío (por cantidad).
+  purchaseId  String?
+  type        ImportCostType
+  description String?
+  amount      Decimal
+  currency    String         @default("USD")
+  fxRateToPyg Decimal?
+  incurredAt  DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  shipment Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  purchase Purchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+
+  @@index([shipmentId])
+  @@index([purchaseId])
+}
+
+model Reception {
+  id          String   @id @default(cuid())
+  shipmentId  String
+  purchaseId  String
+  receivedQty Int
+  receivedAt  DateTime
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  shipment  Shipment             @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+  purchase  Purchase             @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  incidents ReceptionIncident[]
+  movements StockMovement[]
+
+  @@index([shipmentId])
+  @@index([purchaseId])
+  @@index([receivedAt])
+}
+
+model ReceptionIncident {
+  id           String                 @id @default(cuid())
+  receptionId  String
+  type         ReceptionIncidentType
+  quantity     Int
+  notes        String?
+
+  reception Reception @relation(fields: [receptionId], references: [id], onDelete: Cascade)
+}
+
+model StockMovement {
+  id          String               @id @default(cuid())
+  productId   String
+  quantity    Int
+  reason      StockMovementReason
+  receptionId String?
+  notes       String?
+  createdAt   DateTime             @default(now())
+
+  product   Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
+  reception Reception? @relation(fields: [receptionId], references: [id], onDelete: SetNull)
+
+  @@index([productId, createdAt])
+}
+
+// ─── Pedidos y pagos (venta) ────────────────────────────────────────────────
+
+enum OrderZone {
+  ASUNCION
+  INTERIOR
+}
+
+enum OrderStatus {
+  CONFIRMADO
+  PENDIENTE_DE_PAGO
+  PAGO_CONFIRMADO
+  LISTO_PARA_DESPACHO
+  ENVIADO
+  ENTREGADO
+  CERRADO
+  CANCELADO
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  TRANSFERENCIA
+}
+
+enum PaymentStatus {
+  PENDIENTE
+  CONFIRMADO
+}
+
+model Order {
+  id               String      @id @default(cuid())
+  sku              String
+  productName      String
+  quantity         Int
+  /// Porcentaje. 15 automático solo si quantity === 2; el resto queda 0/manual.
+  discountApplied  Int         @default(0)
+  totalAmount      Int
+  zone             OrderZone
+  customerPhone    String
+  contactName      String?
+  recipientName    String
+  invoiceName      String
+  ruc              String
+  status           OrderStatus
+  sessionId        String?
+  chatId           String?
+  /// Asunción (delivery)
+  locationLat      Float?
+  locationLng      Float?
+  locationText     String?
+  preferredTime    String?
+  paymentMethodPreferred PaymentMethod?
+  /// Interior (encomienda)
+  city             String?
+  carrier          String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  payments Payment[]
+
+  @@index([status])
+  @@index([customerPhone])
+  @@index([createdAt])
+  @@index([zone])
+}
+
+model Payment {
+  id        String        @id @default(cuid())
+  orderId   String
+  amount    Int
+  method    PaymentMethod
+  paidAt    DateTime
+  status    PaymentStatus @default(CONFIRMADO)
+  reference String?
+  createdAt DateTime      @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}

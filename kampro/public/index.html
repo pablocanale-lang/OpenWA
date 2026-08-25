@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kampro — Importación</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Instrument+Serif:ital@0;1&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/ui/styles.css" />
+  </head>
+  <body>
+    <div class="bg"></div>
+    <header class="top">
+      <div class="brand">
+        <span class="brand-mark">K</span>
+        <div>
+          <p class="brand-name">Kampro CRM</p>
+          <p class="brand-sub">Importación y abastecimiento · capa sobre OpenWA</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <label class="key-field">
+          <span>API key</span>
+          <input id="apiKey" type="password" autocomplete="off" />
+        </label>
+        <button type="button" id="btnSaveKey" class="btn ghost">Guardar</button>
+        <span id="healthDot" class="dot" title="Estado API"></span>
+      </div>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button type="button" class="tab active" data-tab="products">Productos</button>
+      <button type="button" class="tab" data-tab="suppliers">Proveedores</button>
+      <button type="button" class="tab" data-tab="purchases">Compras</button>
+      <button type="button" class="tab" data-tab="shipments">Envíos</button>
+      <button type="button" class="tab" data-tab="costs">Costos</button>
+      <button type="button" class="tab" data-tab="receptions">Recepción</button>
+      <button type="button" class="tab" data-tab="report">Costo SKU</button>
+    </nav>
+
+    <main>
+      <section id="panel-products" class="panel active">
+        <div class="panel-head">
+          <h1>Productos / SKU</h1>
+          <p>Stock disponible. El ingreso a stock ocurre al registrar una recepción. No hay reposición automática (TODO de negocio).</p>
+        </div>
+        <div id="productsTable" class="table-wrap"></div>
+      </section>
+
+      <section id="panel-suppliers" class="panel">
+        <div class="panel-head">
+          <h1>Proveedores</h1>
+          <p>Proveedor chino (Alibaba): nombre, contacto, país y perfil.</p>
+        </div>
+        <form id="formSupplier" class="form-grid">
+          <label>Nombre <input name="name" required /></label>
+          <label>Contacto <input name="contact" /></label>
+          <label>País <input name="country" value="CN" /></label>
+          <label>Alibaba URL <input name="alibabaUrl" placeholder="https://..." /></label>
+          <label class="full">Notas <input name="notes" /></label>
+          <div class="full actions"><button class="btn primary" type="submit">Crear proveedor</button></div>
+        </form>
+        <div id="suppliersTable" class="table-wrap"></div>
+      </section>
+
+      <section id="panel-purchases" class="panel">
+        <div class="panel-head">
+          <h1>Compras</h1>
+          <p>Compra a proveedor: fecha, SKU, cantidad, precio, moneda. El total se calcula solo.</p>
+        </div>
+        <form id="formPurchase" class="form-grid">
+          <label>Fecha <input name="purchasedAt" type="date" required /></label>
+          <label>Proveedor <select name="supplierId" required></select></label>
+          <label>SKU <select name="productId" required></select></label>
+          <label>Cantidad <input name="quantity" type="number" min="1" required /></label>
+          <label>Precio unitario <input name="unitPrice" required placeholder="2.40" /></label>
+          <label>Moneda <input name="currency" value="USD" /></label>
+          <label>FX a PYG (opcional) <input name="fxRateToPyg" placeholder="7500" /></label>
+          <label>Envío (opcional) <select name="shipmentId"><option value="">— sin asignar —</option></select></label>
+          <div class="full actions"><button class="btn primary" type="submit">Registrar compra</button></div>
+        </form>
+        <div id="purchasesTable" class="table-wrap"></div>
+      </section>
+
+      <section id="panel-shipments" class="panel">
+        <div class="panel-head">
+          <h1>Forwarder / Envío</h1>
+          <p>Coordinación logística a Paraguay: referencia, salida, ETA y llegada real.</p>
+        </div>
+        <form id="formForwarder" class="form-grid">
+          <label>Nombre forwarder <input name="name" required /></label>
+          <label>Contacto <input name="contact" /></label>
+          <label>País <input name="country" /></label>
+          <div class="full actions"><button class="btn primary" type="submit">Crear forwarder</button></div>
+        </form>
+        <form id="formShipment" class="form-grid">
+          <label>Forwarder <select name="forwarderId" required></select></label>
+          <label>Referencia <input name="reference" required placeholder="BL / tracking" /></label>
+          <label>Salida <input name="departedAt" type="date" /></label>
+          <label>ETA <input name="etaAt" type="date" /></label>
+          <label>Llegada real <input name="arrivedAt" type="date" /></label>
+          <label>Asignar compra <select name="purchaseId"><option value="">— ninguna —</option></select></label>
+          <div class="full actions"><button class="btn primary" type="submit">Registrar envío</button></div>
+        </form>
+        <div id="shipmentsTable" class="table-wrap"></div>
+      </section>
+
+      <section id="panel-costs" class="panel">
+        <div class="panel-head">
+          <h1>Costos de importación</h1>
+          <p>Logística, aduana, impuestos u otros. Sin compra asociada se prorratea por cantidad entre las compras del envío.</p>
+        </div>
+        <form id="formCost" class="form-grid">
+          <label>Envío <select name="shipmentId" required></select></label>
+          <label>Compra (opcional) <select name="purchaseId"><option value="">— prorratear en el envío —</option></select></label>
+          <label>
+            Tipo
+            <select name="type">
+              <option value="LOGISTICA">LOGISTICA</option>
+              <option value="ADUANA">ADUANA</option>
+              <option value="IMPUESTO">IMPUESTO</option>
+              <option value="OTRO">OTRO</option>
+            </select>
+          </label>
+          <label>Monto <input name="amount" required /></label>
+          <label>Moneda <input name="currency" value="USD" /></label>
+          <label>FX a PYG (opcional) <input name="fxRateToPyg" /></label>
+          <label class="full">Descripción <input name="description" /></label>
+          <div class="full actions"><button class="btn primary" type="submit">Cargar costo</button></div>
+        </form>
+        <div id="costsTable" class="table-wrap"></div>
+      </section>
+
+      <section id="panel-receptions" class="panel">
+        <div class="panel-head">
+          <h1>Recepción</h1>
+          <p>Cantidad recibida entra a stock. Unidades DANADO no ingresan. Si hay diferencia vs lo comprado y no cargás incidencia, se genera sola.</p>
+        </div>
+        <form id="formReception" class="form-grid">
+          <label>Envío <select name="shipmentId" required></select></label>
+          <label>Compra <select name="purchaseId" required></select></label>
+          <label>Cantidad recibida <input name="receivedQty" type="number" min="0" required /></label>
+          <label>Fecha <input name="receivedAt" type="date" required /></label>
+          <label>
+            Incidencia
+            <select name="incidentType">
+              <option value="">— ninguna —</option>
+              <option value="FALTANTE">FALTANTE</option>
+              <option value="SOBRANTE">SOBRANTE</option>
+              <option value="DANADO">DANADO</option>
+              <option value="OTRO">OTRO</option>
+            </select>
+          </label>
+          <label>Cant. incidencia <input name="incidentQty" type="number" min="1" /></label>
+          <label class="full">Notas <input name="notes" /></label>
+          <div class="full actions"><button class="btn primary" type="submit">Registrar recepción</button></div>
+        </form>
+        <div id="receptionsTable" class="table-wrap"></div>
+      </section>
+
+      <section id="panel-report" class="panel">
+        <div class="panel-head row">
+          <div>
+            <h1>Costo real por SKU</h1>
+            <p>Historial de compras + costos de importación prorrateados. El margen se calcula después, cuando exista precio de venta.</p>
+          </div>
+          <div class="filters">
+            <select id="reportSku"></select>
+            <button type="button" id="btnReport" class="btn primary">Ver historial</button>
+          </div>
+        </div>
+        <div id="reportKpis" class="kpi"></div>
+        <p id="reportNote" class="todo" hidden></p>
+        <div id="reportTable" class="table-wrap"></div>
+      </section>
+    </main>
+
+    <script type="module" src="/ui/app.js"></script>
+  </body>
+</html>

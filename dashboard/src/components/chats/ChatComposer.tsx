@@ -1,12 +1,19 @@
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent, type SetStateAction } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Loader2, Paperclip, Send, Smile, X } from 'lucide-react';
-import { messageApi, type Chat, type MessageType } from '../../services/api';
+import { FileText, Loader2, Paperclip, Send, Smile, X } from 'lucide-react';
+import { messageApi, type Chat, type MessageTemplate, type MessageType } from '../../services/api';
 import { mergeOrAppend, type ChatMessageView } from '../../utils/chatMessages';
 import { promoteChatWithSnippet } from '../../utils/chatList';
 import { buildMediaSendPayload, buildOptimisticMetadata, quotedIdOf } from '../../utils/composerSend';
+import {
+  composeTemplateText,
+  filterTemplatesBySlash,
+  insertTemplateText,
+  slashQueryAt,
+} from '../../utils/templateSlash';
 import { messagesQueryKey, useChatMessagesActions } from '../../hooks/useChatMessages';
+import { useTemplatesQuery } from '../../hooks/queries';
 import { useRole } from '../../hooks/useRole';
 import { useToast } from '../../hooks/useToast';
 import type { ScrollDirection } from '../../utils/scrollDecision';
@@ -75,6 +82,10 @@ function ChatComposer({
   const [sending, setSending] = useState<boolean>(false);
 
   const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [cursor, setCursor] = useState(0);
+  const [highlight, setHighlight] = useState(0);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   // Monotonic token invalidating an in-flight attachment FileReader: picking a second file (or
   // removing the attachment) before `onload` fires must win over the late-arriving bytes —
   // otherwise the slower read overwrites the newer pick. Same pattern as composeImageReadSeq.
@@ -91,6 +102,60 @@ function ChatComposer({
 
   // References
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const { data: templates = [] } = useTemplatesQuery(selectedSessionId, Boolean(selectedSessionId));
+
+  const slash = slashQueryAt(messageInput, cursor);
+  const menuTemplates = useMemo(() => {
+    if (showTemplatePicker) return filterTemplatesBySlash(templates, '');
+    if (slash) return filterTemplatesBySlash(templates, slash.query);
+    return [];
+  }, [showTemplatePicker, templates, slash?.query, Boolean(slash)]);
+  const menuOpen = (showTemplatePicker || Boolean(slash)) && canWrite;
+
+  useEffect(() => {
+    setHighlight(0);
+  }, [slash?.query, showTemplatePicker, menuTemplates.length]);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  }, [messageInput]);
+
+  const syncCursor = (el: HTMLTextAreaElement) => {
+    setCursor(el.selectionStart ?? el.value.length);
+  };
+
+  const applyTemplate = (template: MessageTemplate) => {
+    const replacement = composeTemplateText(template);
+    const next = insertTemplateText(messageInput, cursor, replacement);
+    setMessageInput(next.text);
+    setShowTemplatePicker(false);
+    setShowEmojiPicker(false);
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(next.cursor, next.cursor);
+      setCursor(next.cursor);
+    });
+  };
+
+  const openTemplatePicker = () => {
+    setShowEmojiPicker(false);
+    if (!messageInput.trim()) {
+      setMessageInput('/');
+      setCursor(1);
+      setShowTemplatePicker(false);
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        inputRef.current?.setSelectionRange(1, 1);
+      });
+      return;
+    }
+    setShowTemplatePicker(open => !open);
+  };
 
   // Popular emojis
   const popularEmojis = [
@@ -159,6 +224,7 @@ function ChatComposer({
   const handleEmojiClick = (emoji: string) => {
     setMessageInput(prev => prev + emoji);
     setShowEmojiPicker(false);
+    setShowTemplatePicker(false);
   };
 
   // 7. Handle sending a message / media
@@ -264,6 +330,36 @@ function ChatComposer({
     }
   };
 
+  const handleComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (menuOpen && menuTemplates.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setHighlight(i => (i + 1) % menuTemplates.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setHighlight(i => (i - 1 + menuTemplates.length) % menuTemplates.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const pick = menuTemplates[highlight] ?? menuTemplates[0];
+        if (pick) applyTemplate(pick);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowTemplatePicker(false);
+        return;
+      }
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      void handleSend();
+    }
+  };
+
   return (
     <>
       {/* Attachment preview banner */}
@@ -294,6 +390,31 @@ function ChatComposer({
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {menuOpen && (
+        <div className="chats-template-menu" role="listbox" aria-label={t('chats.templateTitle')}>
+          {templates.length === 0 ? (
+            <p className="chats-template-menu__empty">{t('chats.templateEmpty')}</p>
+          ) : menuTemplates.length === 0 ? (
+            <p className="chats-template-menu__empty">{t('chats.templateNoMatch', { query: slash?.query ?? '' })}</p>
+          ) : (
+            menuTemplates.map((template, index) => (
+              <button
+                key={template.id}
+                type="button"
+                role="option"
+                aria-selected={index === highlight}
+                className={`chats-template-menu__item${index === highlight ? ' active' : ''}`}
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => applyTemplate(template)}
+              >
+                <span className="chats-template-menu__name">/{template.name}</span>
+                <span className="chats-template-menu__preview">{template.body}</span>
+              </button>
+            ))
+          )}
         </div>
       )}
 
@@ -334,7 +455,10 @@ function ChatComposer({
 
           <button
             type="button"
-            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            onClick={() => {
+              setShowTemplatePicker(false);
+              setShowEmojiPicker(!showEmojiPicker);
+            }}
             disabled={!canWrite || sending}
             className={`btn-input-accessory ${showEmojiPicker ? 'active' : ''}`}
             title={t('chats.emojiTitle')}
@@ -342,8 +466,19 @@ function ChatComposer({
             <Smile size={20} />
           </button>
 
-          <input
-            type="text"
+          <button
+            type="button"
+            onClick={openTemplatePicker}
+            disabled={!canWrite || sending}
+            className={`btn-input-accessory ${menuOpen ? 'active' : ''}`}
+            title={t('chats.templateTitle')}
+          >
+            <FileText size={20} />
+          </button>
+
+          <textarea
+            ref={inputRef}
+            rows={1}
             placeholder={
               canWrite
                 ? attachment
@@ -352,7 +487,14 @@ function ChatComposer({
                 : t('chats.noPermission')
             }
             value={messageInput}
-            onChange={e => setMessageInput(e.target.value)}
+            onChange={e => {
+              setMessageInput(e.target.value);
+              syncCursor(e.target);
+            }}
+            onSelect={e => syncCursor(e.currentTarget)}
+            onKeyUp={e => syncCursor(e.currentTarget)}
+            onClick={e => syncCursor(e.currentTarget)}
+            onKeyDown={handleComposerKeyDown}
             disabled={!canWrite || sending}
             className="message-text-input"
           />

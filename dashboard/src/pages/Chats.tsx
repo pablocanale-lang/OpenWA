@@ -4,11 +4,11 @@ import { Trans, useTranslation } from 'react-i18next';
 import { nextReconnectState } from '../utils/reconnectState';
 import { applyIncomingToChatList } from '../utils/chatList';
 import { filterChats, filterChannels, groupStatusesByContact } from '../utils/chatFilters';
-import { ArrowLeft, Loader2, Megaphone, CircleDashed, AlertCircle, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Loader2, Megaphone, CircleDashed, AlertCircle, MessageSquare, ShoppingBag } from 'lucide-react';
 import { useProfilePicture } from '../hooks/useProfilePicture';
 import { useProfilePictures } from '../hooks/useProfilePictures';
 import { useResolvedPhone } from '../hooks/useResolvedPhone';
-import { formatPhoneForDisplay } from '../utils/formatPhone';
+import { formatPhoneForDisplay, parsePhoneFromJid } from '../utils/formatPhone';
 import {
   sessionApi,
   messageApi,
@@ -46,6 +46,7 @@ import KindIcon from '../components/chats/KindIcon';
 import ChatSidebar from '../components/chats/ChatSidebar';
 import ChatThread from '../components/chats/ChatThread';
 import ChatComposer, { type StagedAttachment } from '../components/chats/ChatComposer';
+import { OrderQuickPanel } from '../components/chats/OrderQuickPanel';
 import StatusMedia from '../components/chats/StatusMedia';
 import StatusComposeModal from '../components/chats/StatusComposeModal';
 import './Chats.css';
@@ -70,6 +71,7 @@ interface IncomingWsMessage {
   // The backend emits `call` as a top-level field on the live `message.received` event (it's only
   // folded into `metadata` on the persisted/history path), so declare it here to carry it through.
   call?: { video: boolean; missed: boolean };
+  location?: { latitude: number; longitude: number; description?: string; address?: string; url?: string };
   metadata?: ChatMessageView['metadata'];
   kind?: ChatKind;
   /** Group poster: `from` is the group JID, so `contact`/`author` identify who actually sent it. */
@@ -132,6 +134,7 @@ export function Chats() {
   // Chats/Channels/Status tab selection. Switching tabs closes whatever conversation is open so a
   // press on another tab doesn't leave a Chats-tab room rendered underneath a Channels/Status list.
   const [activeTab, setActiveTab] = useState<'chats' | 'channels' | 'status'>('chats');
+  const [orderPanelOpen, setOrderPanelOpen] = useState(false);
   const switchTab = useCallback((tab: 'chats' | 'channels' | 'status') => {
     setActiveTab(tab);
     setActiveChat(null);
@@ -247,6 +250,9 @@ export function Chats() {
   );
   const activePhoneText =
     activePhoneDisplay ?? (resolvedPhoneQ.data ? formatPhoneForDisplay(resolvedPhoneQ.data) : null);
+  const activePhoneDigits = activeChat
+    ? parsePhoneFromJid(activeChat.id) ?? resolvedPhoneQ.data ?? null
+    : null;
 
   // 1. Fetch available connected sessions on mount
   useEffect(() => {
@@ -353,10 +359,13 @@ export function Chats() {
         status: 'sent',
         timestamp: newMsg.timestamp,
         createdAt: new Date(newMsg.timestamp * 1000).toISOString(),
-        metadata: newMsg.metadata || {
-          media: newMsg.media,
-          quotedMessage: newMsg.quotedMessage,
-          call: newMsg.call,
+        metadata: {
+          ...(newMsg.metadata || {
+            media: newMsg.media,
+            quotedMessage: newMsg.quotedMessage,
+            call: newMsg.call,
+          }),
+          ...(newMsg.location ? { location: newMsg.location } : {}),
         },
         kind: newMsg.kind,
       };
@@ -879,6 +888,7 @@ export function Chats() {
           {/* RIGHT VIEW: active chat room */}
           <main className="chats-room">
             {activeChat ? (
+              <div className={`room-with-order${orderPanelOpen && !activeChat.isGroup ? ' has-order-panel' : ''}`}>
               <div className="room-container">
                 {/* Room header */}
                 <header className="room-header">
@@ -914,6 +924,16 @@ export function Chats() {
                       {activeChat.id}
                     </span>
                   </div>
+                  {!activeChat.isGroup && (
+                    <button
+                      type="button"
+                      className={`room-order-toggle${orderPanelOpen ? ' active' : ''}`}
+                      onClick={() => setOrderPanelOpen(open => !open)}
+                    >
+                      <ShoppingBag size={16} />
+                      {t('orders.openPanel')}
+                    </button>
+                  )}
                 </header>
 
                 {/* Messages body (list, media, reactions, scroll-to-bottom) — components/chats/ChatThread. */}
@@ -950,6 +970,19 @@ export function Chats() {
                   previewUrl={previewUrl}
                   setPreviewUrl={setPreviewUrl}
                 />
+              </div>
+              {orderPanelOpen && !activeChat.isGroup && (
+                <OrderQuickPanel
+                  key={activeChat.id}
+                  sessionId={selectedSessionId}
+                  chat={activeChat}
+                  phoneDigits={activePhoneDigits}
+                  phoneDisplay={activePhoneText ?? activePhoneDigits ?? activeChat.id}
+                  contactName={activeChat.name || ''}
+                  messages={messages}
+                  onClose={() => setOrderPanelOpen(false)}
+                />
+              )}
               </div>
             ) : activeChannel ? (
               // Read-only channel pane: no send footer, reactions, delete, reply, or markChatRead —

@@ -11,6 +11,15 @@ const HISTORY_MEDIA_TYPES = new Set(['image', 'video', 'audio', 'voice', 'sticke
 // messages have no live delivery state, so default to `read` (they are old/already-seen); real status
 // for current-session messages still comes from the DB copy and live websocket acks.
 export function mapEngineHistoryMessage(h: EngineHistoryMessage): ChatMessage {
+  const metadata: ChatMessage['metadata'] = {
+    ...(h.media
+      ? { media: h.media }
+      : HISTORY_MEDIA_TYPES.has(h.type)
+        ? { media: { mimetype: '', omitted: true } }
+        : {}),
+    ...(h.location ? { location: h.location } : {}),
+    ...(h.call ? { call: h.call } : {}),
+  };
   return {
     id: h.id,
     waMessageId: h.id,
@@ -25,11 +34,7 @@ export function mapEngineHistoryMessage(h: EngineHistoryMessage): ChatMessage {
     status: 'read',
     timestamp: h.timestamp,
     createdAt: new Date((h.timestamp ?? 0) * 1000).toISOString(),
-    metadata: h.media
-      ? { media: h.media }
-      : HISTORY_MEDIA_TYPES.has(h.type)
-        ? { media: { mimetype: '', omitted: true } }
-        : undefined,
+    metadata: metadata.media || metadata.location || metadata.call ? metadata : undefined,
   };
 }
 
@@ -127,6 +132,7 @@ export interface ChatMessageView extends ChatMessage {
     quotedMessage?: { id: string; body: string };
     reactions?: Record<string, string>;
     call?: { video: boolean; missed: boolean };
+    location?: { latitude: number; longitude: number; description?: string; address?: string; url?: string };
   };
 }
 
