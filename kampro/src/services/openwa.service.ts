@@ -48,11 +48,19 @@ async function resolveSessionId(preferred?: string | null): Promise<string> {
 }
 
 async function findSalesGroupId(sessionId: string): Promise<{ id: string; name: string }> {
+  const pinned = (process.env.KAMPRO_SALES_GROUP_ID ?? '').trim();
+  if (pinned) {
+    const id = pinned.includes('@') ? pinned : `${pinned}@g.us`;
+    return { id, name: process.env.KAMPRO_SALES_GROUP_NAME ?? DEFAULT_SALES_GROUP_NAME };
+  }
+
   const wanted = (process.env.KAMPRO_SALES_GROUP_NAME ?? DEFAULT_SALES_GROUP_NAME).trim().toLowerCase();
   const groups = await openwaFetch<OpenWaGroup[]>(
     `/api/sessions/${encodeURIComponent(sessionId)}/groups?limit=1000`,
   );
-  const match = groups.find((g) => g.name.trim().toLowerCase() === wanted);
+  const match =
+    groups.find((g) => g.name.trim().toLowerCase() === wanted) ??
+    groups.find((g) => g.name.trim().toLowerCase().includes(wanted));
   if (!match) {
     throw new Error(`No se encontró el grupo de WhatsApp "${process.env.KAMPRO_SALES_GROUP_NAME ?? DEFAULT_SALES_GROUP_NAME}"`);
   }

@@ -1,6 +1,6 @@
 export function kamproBaseUrl(): string {
   if (import.meta.env.DEV) return '/kampro-api';
-  return (import.meta.env.VITE_KAMPRO_API_URL as string | undefined) || 'http://127.0.0.1:3100';
+  return (import.meta.env.VITE_KAMPRO_API_URL as string | undefined) || '/kampro-api';
 }
 
 const KEY_STORAGE = 'kampro_api_key';

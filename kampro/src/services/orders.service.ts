@@ -171,7 +171,19 @@ export async function createOrder(input: CreateOrderInput) {
     include: orderInclude,
   });
 
-  return present(created);
+  let salesNotify: SalesNotifyResult | undefined;
+  if (input.zone === OrderZone.ASUNCION) {
+    salesNotify = await notifySalesGroup({
+      ...created,
+      items: presentItems(created),
+      event: 'created',
+    });
+    if (!salesNotify.ok) {
+      console.warn(`[kampro] aviso al grupo de ventas falló: ${salesNotify.error}`);
+    }
+  }
+
+  return present(created, { salesNotify });
 }
 
 export type UpdateOrderInput = {
@@ -357,10 +369,17 @@ export async function transitionOrder(id: string, action: OrderAction, payment?:
   });
 
   let salesNotify: SalesNotifyResult | undefined;
-  if (action === 'markShipped') {
+  if (action === 'confirmPayment' && order.zone === OrderZone.INTERIOR) {
     salesNotify = await notifySalesGroup({
       ...updated,
       items: presentItems(updated),
+      event: 'paid',
+      payments: updated.payments.map((p) => ({
+        amount: p.amount,
+        method: p.method,
+        reference: p.reference,
+        paidAt: p.paidAt,
+      })),
     });
     if (!salesNotify.ok) {
       console.warn(`[kampro] aviso al grupo de ventas falló: ${salesNotify.error}`);

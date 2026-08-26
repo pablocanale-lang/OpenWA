@@ -87,7 +87,12 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
   const [form, setForm] = useState(() => hydrateFromOrder(order));
   const [pin, setPin] = useState<LocationPin | null>(
     order.locationLat != null && order.locationLng != null
-      ? { latitude: order.locationLat, longitude: order.locationLng, text: order.locationText ?? '' }
+      ? {
+          latitude: order.locationLat,
+          longitude: order.locationLng,
+          text: order.locationText ?? '',
+          captured: true,
+        }
       : null,
   );
   const [saving, setSaving] = useState(false);
@@ -104,7 +109,12 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
     setForm(hydrateFromOrder(order));
     setPin(
       order.locationLat != null && order.locationLng != null
-        ? { latitude: order.locationLat, longitude: order.locationLng, text: order.locationText ?? '' }
+        ? {
+          latitude: order.locationLat,
+          longitude: order.locationLng,
+          text: order.locationText ?? '',
+          captured: true,
+        }
         : null,
     );
   }, [order.id, order.updatedAt, order.status, order.totalAmount, order.locationText]);
@@ -179,10 +189,10 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
       });
       await invalidate();
       toast.success(action === 'cancel' ? t('orders.toast.cancelled') : t('orders.toast.advanced'));
-      if (action === 'markShipped' && updated.salesNotify && !updated.salesNotify.ok) {
+      if (updated.salesNotify && !updated.salesNotify.ok) {
         toast.error(t('orders.toast.notifyFailed'), updated.salesNotify.error);
       }
-      if (action === 'markShipped' && updated.salesNotify?.ok) {
+      if (updated.salesNotify?.ok) {
         toast.success(t('orders.toast.notified'));
       }
       setPayOpen(false);

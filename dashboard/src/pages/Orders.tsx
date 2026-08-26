@@ -118,10 +118,10 @@ export function Orders() {
       await queryClient.invalidateQueries({ queryKey: ['kampro', 'orders'] });
       if (stage !== 'all') setStage(updated.status);
       toast.success(action === 'cancel' ? t('orders.toast.cancelled') : t('orders.toast.advanced'));
-      if (action === 'markShipped' && updated.salesNotify && !updated.salesNotify.ok) {
+      if (updated.salesNotify && !updated.salesNotify.ok) {
         toast.error(t('orders.toast.notifyFailed'), updated.salesNotify.error);
       }
-      if (action === 'markShipped' && updated.salesNotify?.ok) {
+      if (updated.salesNotify?.ok) {
         toast.success(t('orders.toast.notified'));
       }
       setPending(null);

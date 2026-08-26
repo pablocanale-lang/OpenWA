@@ -17,7 +17,7 @@ describe('formatSalesNotifyMessage', () => {
       preferredTime: '2026-08-26T18:00:00.000Z',
       paymentMethodPreferred: 'EFECTIVO',
     });
-    assert.match(text, /Pedido enviado/);
+    assert.match(text, /Pedido nuevo/);
     assert.match(text, /JER-50ML/);
     assert.match(text, /80012345-1/);
     assert.match(text, /Ana/);
@@ -37,9 +37,11 @@ describe('formatSalesNotifyMessage', () => {
       items: [{ sku: 'JER-2ML', productName: 'Jeringa 2 ml', quantity: 1, lineTotal: 80000 }],
       city: 'Encarnación',
       carrier: 'NCC',
+      event: 'paid',
+      payments: [{ amount: 80000, method: 'TRANSFERENCIA', reference: 'TRX-1' }],
     });
     assert.match(text, /Encarnación/);
     assert.match(text, /NCC/);
-    assert.match(text, /encomienda/);
+    assert.match(text, /Pago confirmado/);
   });
 });

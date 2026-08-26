@@ -179,9 +179,15 @@ export function OrderQuickPanel({
         payload.city = city.trim();
         payload.carrier = carrier.trim();
       }
-      await kamproFetch('/orders', { method: 'POST', body: JSON.stringify(payload) });
+      const created = await kamproFetch<KamproOrder>('/orders', { method: 'POST', body: JSON.stringify(payload) });
       await queryClient.invalidateQueries({ queryKey: ['kampro', 'orders'] });
       toast.success(t('orders.toast.created'));
+      if (created.salesNotify && !created.salesNotify.ok) {
+        toast.error(t('orders.toast.notifyFailed'), created.salesNotify.error);
+      }
+      if (created.salesNotify?.ok) {
+        toast.success(t('orders.toast.notified'));
+      }
       setTab('current');
     } catch (err) {
       toast.error(t('orders.toast.error'), err instanceof Error ? err.message : undefined);
