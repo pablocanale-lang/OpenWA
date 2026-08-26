@@ -1067,11 +1067,17 @@
     "confirmPay": "Confirm payment",
     "discountHint": "No discount rule for this quantity — leave at 0 or type a manual %.",
     "noCatalogPrice": "This SKU has no sale price yet. Enter the unit price or the amount to pay.",
+    "noCatalogPriceShort": "no price",
     "noPhone": "Could not read this contact’s phone number.",
     "codHint": "Asunción is always cash on delivery. Payment is confirmed at delivery.",
     "prepaidHint": "Interior (encomienda) cannot ship until a transfer is confirmed.",
+    "dragHint": "Drag onto the order. Sale price comes from the Products catalog.",
+    "dropHint": "Drag catalog products here (or tap one to add it).",
+    "addProduct": "Add product",
+    "removeProduct": "Remove product",
     "fields": {
       "sku": "SKU",
+      "products": "Products",
       "qty": "Quantity",
       "discount": "Discount %",
       "unitPrice": "Unit price (Gs)",
@@ -1121,7 +1127,9 @@
       "advanced": "Order updated",
       "cancelled": "Order cancelled",
       "error": "Could not save the order",
-      "locationAsked": "Location request sent"
+      "locationAsked": "Location request sent",
+      "notified": "Order posted to the Kampro Ventas group",
+      "notifyFailed": "Marked as shipped, but the WhatsApp group could not be notified"
     },
     "filterAll": "All",
     "tab": {

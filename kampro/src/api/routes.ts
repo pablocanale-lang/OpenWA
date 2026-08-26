@@ -434,6 +434,13 @@ export async function apiRoutes(app: FastifyInstance) {
     reference: z.string().optional(),
   });
 
+  const orderLineBody = z.object({
+    sku: z.string().min(1),
+    quantity: z.number().int().positive(),
+    discountApplied: z.number().min(0).max(100).optional(),
+    unitPricePyg: z.number().int().nonnegative().optional(),
+  });
+
   app.get('/orders', async (req, reply) => {
     try {
       const query = z
@@ -461,10 +468,11 @@ export async function apiRoutes(app: FastifyInstance) {
     try {
       const body = z
         .object({
-          sku: z.string().min(1),
-          quantity: z.number().int().positive(),
-          discountApplied: z.number().min(0).max(100),
-          totalAmount: z.number().int().positive(),
+          items: z.array(orderLineBody).min(1).optional(),
+          sku: z.string().min(1).optional(),
+          quantity: z.number().int().positive().optional(),
+          discountApplied: z.number().min(0).max(100).optional(),
+          totalAmount: z.number().int().positive().optional(),
           zone: z.nativeEnum(OrderZone),
           customerPhone: z.string().min(1),
           contactName: z.string().optional(),
@@ -481,6 +489,9 @@ export async function apiRoutes(app: FastifyInstance) {
           city: z.string().optional(),
           carrier: z.string().optional(),
         })
+        .refine((value) => (value.items && value.items.length > 0) || Boolean(value.sku), {
+          message: 'El pedido debe tener al menos un producto',
+        })
         .parse(req.body);
       return await orders.createOrder(body);
     } catch (err) {
@@ -493,6 +504,7 @@ export async function apiRoutes(app: FastifyInstance) {
       const { id } = idParam.parse(req.params);
       const body = z
         .object({
+          items: z.array(orderLineBody).min(1).optional(),
           sku: z.string().min(1).optional(),
           quantity: z.number().int().positive().optional(),
           discountApplied: z.number().min(0).max(100).optional(),

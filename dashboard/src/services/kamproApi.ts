@@ -151,6 +151,17 @@ export type KamproPayment = {
   reference: string | null;
 };
 
+export type KamproOrderLine = {
+  id: string;
+  sku: string;
+  productName: string;
+  quantity: number;
+  unitPricePyg: number;
+  discountApplied: number;
+  lineTotal: number;
+  sortOrder: number;
+};
+
 export type KamproOrder = {
   id: string;
   sku: string;
@@ -176,16 +187,22 @@ export type KamproOrder = {
   carrier: string | null;
   createdAt: string;
   updatedAt: string;
+  items: KamproOrderLine[];
   payments: KamproPayment[];
   primaryAction: OrderAction | null;
   canCancel: boolean;
+  salesNotify?: { ok: true; groupId: string } | { ok: false; error: string };
 };
 
-export type CreateOrderPayload = {
+export type CreateOrderLinePayload = {
   sku: string;
   quantity: number;
   discountApplied: number;
-  totalAmount: number;
+  unitPricePyg: number;
+};
+
+export type CreateOrderPayload = {
+  items: CreateOrderLinePayload[];
   zone: OrderZone;
   customerPhone: string;
   contactName?: string;
@@ -204,10 +221,7 @@ export type CreateOrderPayload = {
 };
 
 export type UpdateOrderPayload = {
-  sku?: string;
-  quantity?: number;
-  discountApplied?: number;
-  totalAmount?: number;
+  items?: CreateOrderLinePayload[];
   contactName?: string | null;
   recipientName?: string;
   invoiceName?: string;

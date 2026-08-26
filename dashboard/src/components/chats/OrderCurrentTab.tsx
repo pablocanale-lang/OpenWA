@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, MapPin } from 'lucide-react';
@@ -13,11 +13,12 @@ import {
   type UpdateOrderPayload,
 } from '../../services/kamproApi';
 import { latestIncomingLocation, type LocationPin } from '../../utils/chatLocation';
-import { discountPercentForQty, formatPyg, quoteTotalPyg } from '../../utils/orderPricing';
+import { formatPyg, sanitizeRucInput, toDatetimeLocalValue, type OrderLineDraft } from '../../utils/orderPricing';
 import { useRole } from '../../hooks/useRole';
 import { useToast } from '../../hooks/useToast';
 import { Modal } from '../Modal';
 import type { ChatMessageView } from '../../utils/chatMessages';
+import { OrderProductLines } from './OrderProductLines';
 
 type Props = {
   order: KamproOrder;
@@ -31,18 +32,37 @@ function composeTemplate(t: { header?: string | null; body: string; footer?: str
   return [t.header, t.body, t.footer].filter(Boolean).join('\n\n');
 }
 
+function linesFromOrder(order: KamproOrder): OrderLineDraft[] {
+  const source: Array<{ id?: string; sku: string; quantity: number; discountApplied: number; unitPricePyg: number }> =
+    order.items && order.items.length > 0
+      ? order.items
+      : [
+          {
+            sku: order.sku,
+            quantity: order.quantity,
+            discountApplied: order.discountApplied,
+            unitPricePyg:
+              order.quantity > 0
+                ? Math.round(order.totalAmount / (order.quantity * (1 - order.discountApplied / 100) || 1))
+                : 0,
+          },
+        ];
+  return source.map((item, index) => ({
+    key: item.id ?? `legacy-${index}`,
+    sku: item.sku,
+    quantity: item.quantity,
+    discount: item.discountApplied,
+    unitPrice: item.unitPricePyg,
+  }));
+}
+
 function hydrateFromOrder(order: KamproOrder) {
-  const catalog = order.quantity > 0 ? Math.round(order.totalAmount / (order.quantity * (1 - order.discountApplied / 100))) : 0;
   return {
-    sku: order.sku,
-    qty: order.quantity,
-    discount: order.discountApplied,
-    unitPrice: Number.isFinite(catalog) ? catalog : 0,
-    total: order.totalAmount,
+    lines: linesFromOrder(order),
     recipientName: order.recipientName,
     invoiceName: order.invoiceName,
     ruc: order.ruc,
-    preferredTime: order.preferredTime ?? '',
+    preferredTime: toDatetimeLocalValue(order.preferredTime ?? ''),
     payMethod: (order.paymentMethodPreferred ?? 'EFECTIVO') as PaymentMethod,
     locationManual: order.locationText ?? '',
     city: order.city ?? '',
@@ -65,7 +85,6 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
     order.status === 'CANCELADO';
 
   const [form, setForm] = useState(() => hydrateFromOrder(order));
-  const [totalDirty, setTotalDirty] = useState(true);
   const [pin, setPin] = useState<LocationPin | null>(
     order.locationLat != null && order.locationLng != null
       ? { latitude: order.locationLat, longitude: order.locationLng, text: order.locationText ?? '' }
@@ -83,7 +102,6 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
 
   useEffect(() => {
     setForm(hydrateFromOrder(order));
-    setTotalDirty(true);
     setPin(
       order.locationLat != null && order.locationLng != null
         ? { latitude: order.locationLat, longitude: order.locationLng, text: order.locationText ?? '' }
@@ -100,24 +118,6 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
     }
   }, [messages, order.zone, detailsLocked, form.locationManual]);
 
-  const quoted = useMemo(
-    () => quoteTotalPyg(form.unitPrice, form.qty, form.discount),
-    [form.unitPrice, form.qty, form.discount],
-  );
-  useEffect(() => {
-    if (!totalDirty) setForm(prev => ({ ...prev, total: quoted }));
-  }, [quoted, totalDirty]);
-
-  const onQtyChange = (next: number) => {
-    const safe = Number.isFinite(next) && next >= 1 ? Math.floor(next) : 1;
-    setForm(prev => ({
-      ...prev,
-      qty: safe,
-      discount: safe === 2 ? discountPercentForQty(safe) : prev.qty === 2 ? 0 : prev.discount,
-    }));
-    setTotalDirty(false);
-  };
-
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['kampro', 'orders'] });
 
   const saveDetails = async () => {
@@ -129,10 +129,12 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         ruc: form.ruc.trim(),
       };
       if (!commercialLocked) {
-        payload.sku = form.sku;
-        payload.quantity = form.qty;
-        payload.discountApplied = form.discount;
-        payload.totalAmount = form.total;
+        payload.items = form.lines.map(line => ({
+          sku: line.sku,
+          quantity: line.quantity,
+          discountApplied: line.discount,
+          unitPricePyg: line.unitPrice,
+        }));
       }
       if (order.zone === 'ASUNCION') {
         payload.locationText = pin?.text || form.locationManual.trim();
@@ -159,7 +161,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
   const runTransition = async (action: OrderAction, withPayment = false) => {
     setSaving(true);
     try {
-      await kamproFetch(`/orders/${order.id}/transition`, {
+      const updated = await kamproFetch<KamproOrder>(`/orders/${order.id}/transition`, {
         method: 'POST',
         body: JSON.stringify({
           action,
@@ -177,6 +179,12 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
       });
       await invalidate();
       toast.success(action === 'cancel' ? t('orders.toast.cancelled') : t('orders.toast.advanced'));
+      if (action === 'markShipped' && updated.salesNotify && !updated.salesNotify.ok) {
+        toast.error(t('orders.toast.notifyFailed'), updated.salesNotify.error);
+      }
+      if (action === 'markShipped' && updated.salesNotify?.ok) {
+        toast.success(t('orders.toast.notified'));
+      }
       setPayOpen(false);
       setCancelOpen(false);
     } catch (err) {
@@ -223,76 +231,12 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         {t(`orders.status.${order.status}`)} · {formatPyg(order.totalAmount)}
       </p>
 
-      <label>
-        {t('orders.fields.sku')}
-        <select
-          value={form.sku}
-          disabled={commercialLocked || !canWrite}
-          onChange={e => {
-            setForm(prev => ({ ...prev, sku: e.target.value }));
-            setTotalDirty(false);
-          }}
-        >
-          {products.map(p => (
-            <option key={p.id} value={p.sku}>
-              {p.sku} — {p.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div className="order-quick-panel__row">
-        <label>
-          {t('orders.fields.qty')}
-          <input
-            type="number"
-            min={1}
-            value={form.qty}
-            disabled={commercialLocked || !canWrite}
-            onChange={e => onQtyChange(Number(e.target.value))}
-          />
-        </label>
-        <label>
-          {t('orders.fields.discount')}
-          <input
-            type="number"
-            min={0}
-            max={100}
-            value={form.discount}
-            disabled={commercialLocked || !canWrite}
-            onChange={e => {
-              setForm(prev => ({ ...prev, discount: Number(e.target.value) || 0 }));
-              setTotalDirty(false);
-            }}
-          />
-        </label>
-      </div>
-      <label>
-        {t('orders.fields.unitPrice')}
-        <input
-          type="number"
-          min={0}
-          value={form.unitPrice}
-          disabled={commercialLocked || !canWrite}
-          onChange={e => {
-            setForm(prev => ({ ...prev, unitPrice: Number(e.target.value) || 0 }));
-            setTotalDirty(false);
-          }}
-        />
-      </label>
-      <label>
-        {t('orders.fields.total')}
-        <input
-          type="number"
-          min={1}
-          value={form.total}
-          disabled={commercialLocked || !canWrite}
-          onChange={e => {
-            setForm(prev => ({ ...prev, total: Number(e.target.value) || 0 }));
-            setTotalDirty(true);
-          }}
-        />
-      </label>
-      <p className="order-quick-panel__quote">{formatPyg(form.total)}</p>
+      <OrderProductLines
+        products={products}
+        lines={form.lines}
+        disabled={commercialLocked || !canWrite}
+        onChange={next => setForm(prev => ({ ...prev, lines: next }))}
+      />
 
       {order.zone === 'ASUNCION' ? (
         <div className="order-quick-panel__zone-fields">
@@ -323,6 +267,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
           <label>
             {t('orders.fields.preferredTime')}
             <input
+              type="datetime-local"
               value={form.preferredTime}
               disabled={detailsLocked || !canWrite}
               onChange={e => setForm(prev => ({ ...prev, preferredTime: e.target.value }))}
@@ -382,7 +327,10 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         <input
           value={form.ruc}
           disabled={detailsLocked || !canWrite}
-          onChange={e => setForm(prev => ({ ...prev, ruc: e.target.value }))}
+          inputMode="numeric"
+          autoComplete="off"
+          pattern="[0-9]+(-[0-9]+)?"
+          onChange={e => setForm(prev => ({ ...prev, ruc: sanitizeRucInput(e.target.value) }))}
         />
       </label>
 

@@ -14,11 +14,12 @@ import {
   type PaymentMethod,
 } from '../../services/kamproApi';
 import { latestIncomingLocation, type LocationPin } from '../../utils/chatLocation';
-import { discountPercentForQty, formatPyg, quoteTotalPyg } from '../../utils/orderPricing';
+import { quoteLinesTotalPyg, sanitizeRucInput, type OrderLineDraft } from '../../utils/orderPricing';
 import { useRole } from '../../hooks/useRole';
 import { useToast } from '../../hooks/useToast';
 import type { ChatMessageView } from '../../utils/chatMessages';
 import { OrderCurrentTab } from './OrderCurrentTab';
+import { OrderProductLines } from './OrderProductLines';
 import './OrderQuickPanel.css';
 
 type Props = {
@@ -50,12 +51,7 @@ export function OrderQuickPanel({
   const queryClient = useQueryClient();
 
   const [online, setOnline] = useState<boolean | null>(null);
-  const [sku, setSku] = useState('');
-  const [qty, setQty] = useState(2);
-  const [discount, setDiscount] = useState(() => discountPercentForQty(2));
-  const [unitPrice, setUnitPrice] = useState(0);
-  const [total, setTotal] = useState(0);
-  const [totalDirty, setTotalDirty] = useState(false);
+  const [lines, setLines] = useState<OrderLineDraft[]>([]);
   const [zone, setZone] = useState<OrderZone | ''>('');
   const [recipientName, setRecipientName] = useState(contactName);
   const [invoiceName, setInvoiceName] = useState(contactName);
@@ -103,23 +99,7 @@ export function OrderQuickPanel({
   );
   const currentOrder = openOrders.find(order => order.id === selectedOrderId) ?? openOrders[0] ?? null;
   const resolvedTab = tab ?? (currentOrder ? 'current' : 'new');
-
-  useEffect(() => {
-    if (!sku && products[0]) setSku(products[0].sku);
-  }, [products, sku]);
-
-  const selected = products.find(p => p.sku === sku);
-
-  useEffect(() => {
-    if (!selected) return;
-    setUnitPrice(selected.unitPricePyg ?? 0);
-    setTotalDirty(false);
-  }, [selected?.id, selected?.unitPricePyg]);
-
-  const quoted = useMemo(() => quoteTotalPyg(unitPrice, qty, discount), [unitPrice, qty, discount]);
-  useEffect(() => {
-    if (!totalDirty) setTotal(quoted);
-  }, [quoted, totalDirty]);
+  const total = quoteLinesTotalPyg(lines);
 
   useEffect(() => {
     if (zone !== 'ASUNCION') return;
@@ -135,8 +115,7 @@ export function OrderQuickPanel({
     Boolean(locationText) && Boolean(preferredTime.trim()) && Boolean(payMethod);
   const interiorReady = Boolean(city.trim()) && Boolean(carrier.trim());
   const commonReady =
-    Boolean(sku) &&
-    qty >= 1 &&
+    lines.length >= 1 &&
     total > 0 &&
     Boolean(phoneDigits) &&
     Boolean(recipientName.trim()) &&
@@ -147,13 +126,6 @@ export function OrderQuickPanel({
     canWrite &&
     commonReady &&
     (zone === 'ASUNCION' ? asuncionReady : zone === 'INTERIOR' ? interiorReady : false);
-
-  const onQtyChange = (next: number) => {
-    const safe = Number.isFinite(next) && next >= 1 ? Math.floor(next) : 1;
-    setDiscount(prev => (safe === 2 ? discountPercentForQty(safe) : qty === 2 ? 0 : prev));
-    setQty(safe);
-    setTotalDirty(false);
-  };
 
   const askLocation = async () => {
     setAskingLocation(true);
@@ -180,10 +152,12 @@ export function OrderQuickPanel({
     setSaving(true);
     try {
       const payload: CreateOrderPayload = {
-        sku,
-        quantity: qty,
-        discountApplied: discount,
-        totalAmount: total,
+        items: lines.map(line => ({
+          sku: line.sku,
+          quantity: line.quantity,
+          discountApplied: line.discount,
+          unitPricePyg: line.unitPrice,
+        })),
         zone,
         customerPhone: phoneDigits,
         contactName: contactName || undefined,
@@ -259,7 +233,7 @@ export function OrderQuickPanel({
               <select value={currentOrder?.id ?? ''} onChange={e => setSelectedOrderId(e.target.value)}>
                 {openOrders.map(item => (
                   <option key={item.id} value={item.id}>
-                    {item.sku} × {item.quantity} — {t(`orders.status.${item.status}`)}
+                    {(item.items?.length ? item.items.map(line => `${line.sku} ×${line.quantity}`).join(', ') : `${item.sku} × ${item.quantity}`)} — {t(`orders.status.${item.status}`)}
                   </option>
                 ))}
               </select>
@@ -276,70 +250,7 @@ export function OrderQuickPanel({
             />
           ) : (
         <div className="order-quick-panel__body">
-          <label>
-            {t('orders.fields.sku')}
-            <select
-              value={sku}
-              onChange={e => {
-                setSku(e.target.value);
-                setTotalDirty(false);
-              }}
-            >
-              {products.map(p => (
-                <option key={p.id} value={p.sku}>
-                  {p.sku} — {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="order-quick-panel__row">
-            <label>
-              {t('orders.fields.qty')}
-              <input type="number" min={1} value={qty} onChange={e => onQtyChange(Number(e.target.value))} />
-            </label>
-            <label>
-              {t('orders.fields.discount')}
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={discount}
-                onChange={e => {
-                  setDiscount(Number(e.target.value) || 0);
-                  setTotalDirty(false);
-                }}
-              />
-            </label>
-          </div>
-          {qty !== 2 && <p className="order-quick-panel__hint">{t('orders.discountHint')}</p>}
-          {selected && selected.unitPricePyg == null && (
-            <p className="order-quick-panel__hint">{t('orders.noCatalogPrice')}</p>
-          )}
-          <label>
-            {t('orders.fields.unitPrice')}
-            <input
-              type="number"
-              min={0}
-              value={unitPrice}
-              onChange={e => {
-                setUnitPrice(Number(e.target.value) || 0);
-                setTotalDirty(false);
-              }}
-            />
-          </label>
-          <label>
-            {t('orders.fields.total')}
-            <input
-              type="number"
-              min={1}
-              value={total}
-              onChange={e => {
-                setTotal(Number(e.target.value) || 0);
-                setTotalDirty(true);
-              }}
-            />
-          </label>
-          <p className="order-quick-panel__quote">{formatPyg(total)}</p>
+          <OrderProductLines products={products} lines={lines} onChange={setLines} />
 
           <label>
             {t('orders.fields.phone')}
@@ -402,11 +313,17 @@ export function OrderQuickPanel({
               </label>
               <label>
                 {t('orders.fields.ruc')}
-                <input value={ruc} onChange={e => setRuc(e.target.value)} />
+                <input
+                  value={ruc}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  pattern="[0-9]+(-[0-9]+)?"
+                  onChange={e => setRuc(sanitizeRucInput(e.target.value))}
+                />
               </label>
               <label>
                 {t('orders.fields.preferredTime')}
-                <input value={preferredTime} onChange={e => setPreferredTime(e.target.value)} />
+                <input type="datetime-local" value={preferredTime} onChange={e => setPreferredTime(e.target.value)} />
               </label>
               <label>
                 {t('orders.fields.payMethod')}
@@ -439,7 +356,13 @@ export function OrderQuickPanel({
               </label>
               <label>
                 {t('orders.fields.ruc')}
-                <input value={ruc} onChange={e => setRuc(e.target.value)} />
+                <input
+                  value={ruc}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  pattern="[0-9]+(-[0-9]+)?"
+                  onChange={e => setRuc(sanitizeRucInput(e.target.value))}
+                />
               </label>
               <p className="order-quick-panel__hint">{t('orders.prepaidHint')}</p>
             </div>

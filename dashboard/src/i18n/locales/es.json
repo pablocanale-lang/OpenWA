@@ -1067,11 +1067,17 @@
     "confirmPay": "Confirmar pago",
     "discountHint": "No hay regla de descuento para esta cantidad: dejá 0 o cargá un % a mano.",
     "noCatalogPrice": "Este SKU no tiene precio de venta. Cargá el precio unitario o el monto a pagar.",
+    "noCatalogPriceShort": "sin precio",
     "noPhone": "No se pudo leer el teléfono de este contacto.",
     "codHint": "En Asunción el cobro es siempre contraentrega. Se confirma en la entrega.",
     "prepaidHint": "Interior (encomienda) no se despacha sin transferencia confirmada.",
+    "dragHint": "Arrastrá al pedido. El precio de venta viene del catálogo de Productos.",
+    "dropHint": "Arrastrá acá los productos del catálogo (o tocá uno para agregarlo).",
+    "addProduct": "Agregar producto",
+    "removeProduct": "Quitar producto",
     "fields": {
       "sku": "SKU",
+      "products": "Productos",
       "qty": "Cantidad",
       "discount": "Descuento %",
       "unitPrice": "Precio unitario (Gs)",
@@ -1121,7 +1127,9 @@
       "advanced": "Pedido actualizado",
       "cancelled": "Pedido cancelado",
       "error": "No se pudo guardar el pedido",
-      "locationAsked": "Pedido de ubicación enviado"
+      "locationAsked": "Pedido de ubicación enviado",
+      "notified": "Pedido avisado al grupo Kampro Ventas",
+      "notifyFailed": "El pedido se marcó enviado, pero no se pudo avisar al grupo de WhatsApp"
     },
     "filterAll": "Todos",
     "tab": {

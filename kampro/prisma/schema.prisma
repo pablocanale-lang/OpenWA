@@ -244,10 +244,11 @@ enum PaymentStatus {
 
 model Order {
   id               String      @id @default(cuid())
+  /// Resumen denormalizado de las líneas (varios SKU unidos).
   sku              String
   productName      String
   quantity         Int
-  /// Porcentaje. 15 automático solo si quantity === 2; el resto queda 0/manual.
+  /// Porcentaje. 15 automático solo si quantity === 2 en esa línea; el resto queda 0/manual.
   discountApplied  Int         @default(0)
   totalAmount      Int
   zone             OrderZone
@@ -271,12 +272,30 @@ model Order {
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
+  items    OrderLine[]
   payments Payment[]
 
   @@index([status])
   @@index([customerPhone])
   @@index([createdAt])
   @@index([zone])
+}
+
+model OrderLine {
+  id               String   @id @default(cuid())
+  orderId          String
+  sku              String
+  productName      String
+  quantity         Int
+  unitPricePyg     Int
+  discountApplied  Int      @default(0)
+  lineTotal        Int
+  sortOrder        Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
 }
 
 model Payment {

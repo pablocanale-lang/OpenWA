@@ -9,3 +9,7 @@ export function quoteTotalPyg(unitPricePyg: number, quantity: number, discountPe
   const pct = Number.isFinite(discountPercent) ? Math.min(100, Math.max(0, discountPercent)) : 0;
   return Math.round(unitPricePyg * quantity * (1 - pct / 100));
 }
+
+export function formatPyg(amount: number): string {
+  return `${new Intl.NumberFormat('es-PY').format(amount)} Gs`;
+}

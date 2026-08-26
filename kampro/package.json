@@ -13,7 +13,7 @@
     "db:seed:demo": "tsx prisma/seed.ts --demo",
     "db:studio": "prisma studio",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/domain/landed-cost.test.ts src/domain/order-pricing.test.ts src/domain/order-transitions.test.ts"
+    "test": "tsx --test src/domain/landed-cost.test.ts src/domain/order-pricing.test.ts src/domain/order-transitions.test.ts src/domain/order-fields.test.ts src/domain/sales-notify.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

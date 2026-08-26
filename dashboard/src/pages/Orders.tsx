@@ -118,6 +118,12 @@ export function Orders() {
       await queryClient.invalidateQueries({ queryKey: ['kampro', 'orders'] });
       if (stage !== 'all') setStage(updated.status);
       toast.success(action === 'cancel' ? t('orders.toast.cancelled') : t('orders.toast.advanced'));
+      if (action === 'markShipped' && updated.salesNotify && !updated.salesNotify.ok) {
+        toast.error(t('orders.toast.notifyFailed'), updated.salesNotify.error);
+      }
+      if (action === 'markShipped' && updated.salesNotify?.ok) {
+        toast.success(t('orders.toast.notified'));
+      }
       setPending(null);
       setCancelTarget(null);
     } catch (err) {
@@ -193,7 +199,9 @@ export function Orders() {
                       <td>{order.contactName || order.recipientName}</td>
                       <td>{order.customerPhone}</td>
                       <td>
-                        {order.sku} × {order.quantity}
+                        {order.items?.length
+                          ? order.items.map(line => `${line.sku} × ${line.quantity}`).join(', ')
+                          : `${order.sku} × ${order.quantity}`}
                       </td>
                       <td>
                         <span className={`order-zone ${order.zone.toLowerCase()}`}>
