@@ -65,7 +65,8 @@
     "plugins": "플러그인",
     "logs": "로그",
     "imports": "수입",
-    "orders": "주문"
+    "orders": "주문",
+    "inventory": "Inventory"
   },
   "chats": {
     "media": {
@@ -173,7 +174,13 @@
     },
     "templateTitle": "Templates",
     "templateEmpty": "No templates in this session. Create them under Templates.",
-    "templateNoMatch": "No template matches /{{query}}"
+    "templateNoMatch": "No template matches /{{query}}",
+    "followUp": "Follow-up",
+    "followUpOn": "Remove follow-up",
+    "followUpOff": "Mark for follow-up",
+    "followUpFilter": "Follow-up only",
+    "followUpEmpty": "No chats marked for follow-up",
+    "followUpBadge": "Follow-up"
   },
   "errorBoundary": {
     "title": "문제가 발생했습니다",
@@ -1064,6 +1071,7 @@
     "create": "Create order",
     "saveData": "Save details",
     "cancelConfirm": "This order has not been paid yet. Cancel it?",
+    "returnConfirm": "Return this order to inventory? Stock will be restored.",
     "confirmPay": "Confirm payment",
     "discountHint": "No discount rule for this quantity — leave at 0 or type a manual %.",
     "noCatalogPrice": "This SKU has no sale price yet. Enter the unit price or the amount to pay.",
@@ -1087,7 +1095,10 @@
       "payMethod": "Payment method",
       "city": "City",
       "carrier": "Carrier",
-      "reference": "Receipt / reference"
+      "reference": "Receipt / reference",
+      "products": "Products",
+      "shippingCost": "Shipping cost (Gs)",
+      "invoice": "Invoice"
     },
     "zone": {
       "asuncion": "Asunción and surroundings",
@@ -1105,7 +1116,8 @@
       "ENVIADO": "Shipped",
       "ENTREGADO": "Delivered",
       "CERRADO": "Closed",
-      "CANCELADO": "Cancelled"
+      "CANCELADO": "Cancelled",
+      "DEVUELTO": "Returned"
     },
     "actions": {
       "confirmPayment": "Confirm payment",
@@ -1113,15 +1125,21 @@
       "markShipped": "Mark shipped",
       "markDelivered": "Mark delivered",
       "close": "Close order",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "returnOrder": "Return / refund"
     },
     "toast": {
       "created": "Order created",
       "updated": "Details saved",
       "advanced": "Order updated",
       "cancelled": "Order cancelled",
+      "returned": "Order returned; stock restored",
       "error": "Could not save the order",
-      "locationAsked": "Location request sent"
+      "locationAsked": "Location request sent",
+      "statusSet": "Stage updated",
+      "shippingSaved": "Shipping cost saved",
+      "notified": "Order posted to the Kampro Ventas group",
+      "notifyFailed": "Marked as shipped, but the WhatsApp group could not be notified"
     },
     "filterAll": "All",
     "tab": {
@@ -1133,11 +1151,67 @@
       "client": "Customer",
       "amount": "Amount (Gs)",
       "stage": "Stage",
-      "action": "Action"
+      "action": "Action",
+      "shipping": "Shipping (Gs)",
+      "invoice": "Invoice"
     },
     "zoneShort": {
       "asuncion": "Asunción",
       "interior": "Interior"
+    },
+    "stockShort": "{{count}} u.",
+    "stockShortfall": "Only {{have}} in inventory; not enough for this order.",
+    "cancelPaidConfirm": "This order is already paid. Cancelling records a refund and returns the product to stock.",
+    "refundConfirm": "Record the refund and return the product to stock?",
+    "noCatalogPriceShort": "no price",
+    "dragHint": "Drag onto the order. Price and stock come from Inventory.",
+    "dropHint": "Drag catalog products here (or tap one to add it).",
+    "addProduct": "Add product",
+    "removeProduct": "Remove product",
+    "moreActions": "More actions",
+    "setStatus": "Change stage"
+  },
+  "inventory": {
+    "subtitle": "Available units and sale prices. Orders take the price from here and deduct stock on create. Cancel, refund or return puts units back.",
+    "offlineHint": "Start the Kampro API (start-kampro.bat) while OpenWA is running.",
+    "addTitle": "Add product",
+    "add": "Save product",
+    "empty": "No products yet. Add the first SKU here.",
+    "adjust": "Adjust",
+    "adjustHint": "Enter a positive or negative number other than 0.",
+    "savePrice": "Save price",
+    "movements": "Movements",
+    "noMovements": "No stock movements yet.",
+    "fields": {
+      "sku": "SKU",
+      "name": "Name",
+      "capacity": "Capacity (ml)",
+      "stock": "Units",
+      "price": "Sale price (Gs)",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "stats": {
+      "skus": "SKUs",
+      "units": "Units in stock",
+      "withPrice": "With sale price"
+    },
+    "reason": {
+      "RECEPCION": "Reception",
+      "AJUSTE": "Adjustment",
+      "VENTA": "Sale",
+      "CANCELACION_PEDIDO": "Order cancelled",
+      "DEVOLUCION": "Return / refund"
+    },
+    "toast": {
+      "created": "Product added",
+      "priceSaved": "Sale price saved",
+      "stockSaved": "Stock updated",
+      "error": "Could not save"
     }
   }
 }

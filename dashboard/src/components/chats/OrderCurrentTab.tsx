@@ -76,13 +76,9 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
   const { canWrite } = useRole();
   const queryClient = useQueryClient();
 
-  const paid = order.payments.some(p => p.status === 'CONFIRMADO');
-  const commercialLocked = paid || (order.status !== 'CONFIRMADO' && order.status !== 'PENDIENTE_DE_PAGO');
-  const detailsLocked =
-    order.status === 'ENVIADO' ||
-    order.status === 'ENTREGADO' ||
-    order.status === 'CERRADO' ||
-    order.status === 'CANCELADO';
+  const paid = (order.netPaid ?? 0) > 0;
+  const commercialLocked = !canWrite || order.canEditCommercial === false;
+  const detailsLocked = !canWrite || order.canEditDetails === false;
 
   const [form, setForm] = useState(() => hydrateFromOrder(order));
   const [pin, setPin] = useState<LocationPin | null>(
@@ -99,6 +95,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
   const [askingLocation, setAskingLocation] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [returnOpen, setReturnOpen] = useState(false);
   const [payAmount, setPayAmount] = useState(order.totalAmount);
   const [payMethodConfirm, setPayMethodConfirm] = useState<PaymentMethod>(
     order.zone === 'INTERIOR' ? 'TRANSFERENCIA' : (order.paymentMethodPreferred ?? 'EFECTIVO'),
@@ -128,7 +125,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
     }
   }, [messages, order.zone, detailsLocked, form.locationManual]);
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['kampro', 'orders'] });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['kampro'] });
 
   const saveDetails = async () => {
     setSaving(true);
@@ -188,7 +185,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         }),
       });
       await invalidate();
-      toast.success(action === 'cancel' ? t('orders.toast.cancelled') : t('orders.toast.advanced'));
+      toast.success(action === 'cancel' ? t('orders.toast.cancelled') : action === 'returnOrder' ? t('orders.toast.returned') : t('orders.toast.advanced'));
       if (updated.salesNotify && !updated.salesNotify.ok) {
         toast.error(t('orders.toast.notifyFailed'), updated.salesNotify.error);
       }
@@ -197,6 +194,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
       }
       setPayOpen(false);
       setCancelOpen(false);
+      setReturnOpen(false);
     } catch (err) {
       toast.error(t('orders.toast.error'), err instanceof Error ? err.message : undefined);
     } finally {
@@ -239,12 +237,13 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
     <div className="order-quick-panel__body">
       <p className="order-quick-panel__status">
         {t(`orders.status.${order.status}`)} · {formatPyg(order.totalAmount)}
+        {order.invoiceNumber ? ` · ${t('orders.fields.invoice')} ${order.invoiceNumber}` : ''}
       </p>
 
       <OrderProductLines
         products={products}
         lines={form.lines}
-        disabled={commercialLocked || !canWrite}
+        disabled={commercialLocked}
         onChange={next => setForm(prev => ({ ...prev, lines: next }))}
       />
 
@@ -254,7 +253,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
             {t('orders.fields.maps')}
             <input
               value={form.locationManual}
-              disabled={detailsLocked || !canWrite}
+              disabled={detailsLocked}
               onChange={e => {
                 setForm(prev => ({ ...prev, locationManual: e.target.value }));
                 if (pin && e.target.value !== pin.text) setPin(null);
@@ -279,7 +278,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
             <input
               type="datetime-local"
               value={form.preferredTime}
-              disabled={detailsLocked || !canWrite}
+              disabled={detailsLocked}
               onChange={e => setForm(prev => ({ ...prev, preferredTime: e.target.value }))}
             />
           </label>
@@ -287,7 +286,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
             {t('orders.fields.payMethod')}
             <select
               value={form.payMethod}
-              disabled={detailsLocked || !canWrite}
+              disabled={detailsLocked}
               onChange={e => setForm(prev => ({ ...prev, payMethod: e.target.value as PaymentMethod }))}
             >
               <option value="EFECTIVO">{t('orders.pay.cash')}</option>
@@ -301,7 +300,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
             {t('orders.fields.city')}
             <input
               value={form.city}
-              disabled={detailsLocked || !canWrite}
+              disabled={detailsLocked}
               onChange={e => setForm(prev => ({ ...prev, city: e.target.value }))}
             />
           </label>
@@ -309,7 +308,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
             {t('orders.fields.carrier')}
             <input
               value={form.carrier}
-              disabled={detailsLocked || !canWrite}
+              disabled={detailsLocked}
               onChange={e => setForm(prev => ({ ...prev, carrier: e.target.value }))}
             />
           </label>
@@ -320,7 +319,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         {t('orders.fields.recipient')}
         <input
           value={form.recipientName}
-          disabled={detailsLocked || !canWrite}
+          disabled={detailsLocked}
           onChange={e => setForm(prev => ({ ...prev, recipientName: e.target.value }))}
         />
       </label>
@@ -328,7 +327,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         {t('orders.fields.invoiceName')}
         <input
           value={form.invoiceName}
-          disabled={detailsLocked || !canWrite}
+          disabled={detailsLocked}
           onChange={e => setForm(prev => ({ ...prev, invoiceName: e.target.value }))}
         />
       </label>
@@ -336,7 +335,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         {t('orders.fields.ruc')}
         <input
           value={form.ruc}
-          disabled={detailsLocked || !canWrite}
+          disabled={detailsLocked}
           inputMode="numeric"
           autoComplete="off"
           pattern="[0-9]+(-[0-9]+)?"
@@ -344,14 +343,14 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         />
       </label>
 
-      {canWrite && !detailsLocked && (
+      {canWrite && order.canEditDetails !== false && (
         <button type="button" className="btn-secondary" disabled={saving} onClick={() => void saveDetails()}>
           {saving ? <Loader2 className="animate-spin" size={16} /> : null}
           {t('orders.saveData')}
         </button>
       )}
 
-      {canWrite && (order.primaryAction || order.canCancel) && (
+      {canWrite && (order.primaryAction || order.canCancel || order.canReturn) && (
         <div className="order-quick-panel__actions">
           {order.primaryAction && (
             <button
@@ -366,6 +365,11 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
           {order.canCancel && (
             <button type="button" className="btn-danger" disabled={saving} onClick={() => setCancelOpen(true)}>
               {t('orders.actions.cancel')}
+            </button>
+          )}
+          {order.canReturn && (
+            <button type="button" className="btn-secondary" disabled={saving} onClick={() => setReturnOpen(true)}>
+              {t('orders.actions.returnOrder')}
             </button>
           )}
         </div>
@@ -431,7 +435,26 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
           </>
         }
       >
-        <p>{t('orders.cancelConfirm')}</p>
+        <p>{paid ? t('orders.cancelPaidConfirm') : t('orders.cancelConfirm')}</p>
+      </Modal>
+
+      <Modal
+        open={returnOpen}
+        onClose={() => setReturnOpen(false)}
+        title={t('orders.actions.returnOrder')}
+        footer={
+          <>
+            <button type="button" className="btn-secondary" onClick={() => setReturnOpen(false)}>
+              {t('common.cancel')}
+            </button>
+            <button type="button" className="btn-primary" disabled={saving} onClick={() => void runTransition('returnOrder')}>
+              {saving ? <Loader2 className="animate-spin" size={16} /> : null}
+              {t('orders.actions.returnOrder')}
+            </button>
+          </>
+        }
+      >
+        <p>{t('orders.refundConfirm')}</p>
       </Modal>
     </div>
   );

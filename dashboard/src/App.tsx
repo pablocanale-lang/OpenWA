@@ -24,6 +24,7 @@ const MessageTester = lazy(() => import('./pages/MessageTester').then(m => ({ de
 const Infrastructure = lazy(() => import('./pages/Infrastructure').then(m => ({ default: m.Infrastructure })));
 const Plugins = lazy(() => import('./pages/Plugins'));
 const Kampro = lazy(() => import('./pages/Kampro').then(m => ({ default: m.Kampro })));
+const Inventory = lazy(() => import('./pages/Inventory').then(m => ({ default: m.Inventory })));
 const Orders = lazy(() => import('./pages/Orders').then(m => ({ default: m.Orders })));
 
 const queryClient = new QueryClient({
@@ -115,6 +116,7 @@ function AppContent() {
               <Route path="sessions" element={<Sessions />} />
               <Route path="chats" element={<Chats />} />
               <Route path="orders" element={<Orders />} />
+              <Route path="inventory" element={<Inventory />} />
               <Route path="imports" element={<Kampro />} />
               <Route path="kampro" element={<Navigate to="/imports" replace />} />
               <Route path="webhooks" element={<Webhooks />} />

@@ -59,8 +59,11 @@ export async function resolveOrderLines(input: {
     const discountApplied =
       row.discountApplied !== undefined ? Math.round(row.discountApplied) : discountPercentForQty(quantity);
     if (discountApplied < 0 || discountApplied > 100) badRequest('Descuento inválido');
-    const unitPricePyg = Math.round(row.unitPricePyg ?? product.unitPricePyg ?? 0);
-    if (!Number.isFinite(unitPricePyg) || unitPricePyg < 0) badRequest('Precio unitario inválido');
+    const unitPricePyg = product.unitPricePyg;
+    if (unitPricePyg == null || unitPricePyg < 1) {
+      badRequest(`Falta el precio de venta en Inventario para ${product.sku}`);
+    }
+    if (product.status !== 'ACTIVE') badRequest(`El producto ${product.sku} está inactivo`);
     const lineTotal = quoteTotalPyg(unitPricePyg, quantity, discountApplied);
     lines.push({
       sku: product.sku,
@@ -74,6 +77,6 @@ export async function resolveOrderLines(input: {
   }
 
   const totalAmount = lines.reduce((sum, l) => sum + l.lineTotal, 0);
-  if (totalAmount < 1) badRequest('El monto a pagar debe ser mayor a 0. Revisá precios de venta en Productos.');
+  if (totalAmount < 1) badRequest('El monto a pagar debe ser mayor a 0. Revisá precios de venta en Inventario.');
   return lines;
 }

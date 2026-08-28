@@ -180,7 +180,7 @@ export function OrderQuickPanel({
         payload.carrier = carrier.trim();
       }
       const created = await kamproFetch<KamproOrder>('/orders', { method: 'POST', body: JSON.stringify(payload) });
-      await queryClient.invalidateQueries({ queryKey: ['kampro', 'orders'] });
+      await queryClient.invalidateQueries({ queryKey: ['kampro'] });
       toast.success(t('orders.toast.created'));
       if (created.salesNotify && !created.salesNotify.ok) {
         toast.error(t('orders.toast.notifyFailed'), created.salesNotify.error);

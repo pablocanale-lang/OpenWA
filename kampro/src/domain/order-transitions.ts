@@ -7,6 +7,7 @@ export const ORDER_STATUSES = [
   'ENTREGADO',
   'CERRADO',
   'CANCELADO',
+  'DEVUELTO',
 ] as const;
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
@@ -17,7 +18,8 @@ export type OrderAction =
   | 'markShipped'
   | 'markDelivered'
   | 'close'
-  | 'cancel';
+  | 'cancel'
+  | 'returnOrder';
 
 export function initialStatusForZone(zone: OrderZone): OrderStatus {
   return zone === 'ASUNCION' ? 'CONFIRMADO' : 'PENDIENTE_DE_PAGO';
@@ -25,31 +27,39 @@ export function initialStatusForZone(zone: OrderZone): OrderStatus {
 
 /** Pedido aún abierto para operar desde el chat (no cerrado ni cancelado). */
 export function isOpenOrder(status: OrderStatus): boolean {
-  return status !== 'CERRADO' && status !== 'CANCELADO';
+  return status !== 'CERRADO' && status !== 'CANCELADO' && status !== 'DEVUELTO';
 }
 
-/** Cancelar solo si no hay pago confirmado y todavía no salió de viaje. */
-export function canCancelOrder(status: OrderStatus, hasConfirmedPayment: boolean): boolean {
-  if (hasConfirmedPayment) return false;
-  return status === 'CONFIRMADO' || status === 'PENDIENTE_DE_PAGO' || status === 'LISTO_PARA_DESPACHO';
+export function isTerminalOrder(status: OrderStatus): boolean {
+  return status === 'CANCELADO' || status === 'DEVUELTO';
 }
 
+/** Cancelar en cualquier etapa, salvo que ya esté cancelado o devuelto. */
+export function canCancelOrder(status: OrderStatus, _hasConfirmedPayment: boolean): boolean {
+  return !isTerminalOrder(status);
+}
+
+/** Reembolso en cualquier etapa si hubo cobro (o siempre si no está terminal). */
+export function canReturnOrder(status: OrderStatus, hasConfirmedPayment: boolean): boolean {
+  if (isTerminalOrder(status)) return false;
+  return hasConfirmedPayment;
+}
+
+/** Datos del pedido editables en cualquier etapa no terminal. */
 export function canEditOrderDetails(status: OrderStatus): boolean {
-  return (
-    status === 'CONFIRMADO' ||
-    status === 'PENDIENTE_DE_PAGO' ||
-    status === 'PAGO_CONFIRMADO' ||
-    status === 'LISTO_PARA_DESPACHO'
-  );
+  return !isTerminalOrder(status);
 }
 
-export function canEditCommercial(status: OrderStatus, hasConfirmedPayment: boolean): boolean {
-  if (hasConfirmedPayment) return false;
-  return status === 'CONFIRMADO' || status === 'PENDIENTE_DE_PAGO';
+export function canEditCommercial(status: OrderStatus, _hasConfirmedPayment: boolean): boolean {
+  return !isTerminalOrder(status);
+}
+
+export function canEditShippingCost(status: OrderStatus): boolean {
+  return status === 'ENVIADO' || status === 'ENTREGADO' || status === 'CERRADO';
 }
 
 export function primaryActionFor(zone: OrderZone, status: OrderStatus): OrderAction | null {
-  if (status === 'CERRADO' || status === 'CANCELADO') return null;
+  if (status === 'CERRADO' || status === 'CANCELADO' || status === 'DEVUELTO') return null;
   if (status === 'ENTREGADO') return 'close';
   if (status === 'ENVIADO') return 'markDelivered';
   if (status === 'LISTO_PARA_DESPACHO') return 'markShipped';
@@ -73,6 +83,8 @@ export function nextStatusForAction(action: OrderAction): OrderStatus {
       return 'CERRADO';
     case 'cancel':
       return 'CANCELADO';
+    case 'returnOrder':
+      return 'DEVUELTO';
   }
 }
 
@@ -84,7 +96,14 @@ export function assertOrderTransition(input: {
 }): void {
   if (input.action === 'cancel') {
     if (!canCancelOrder(input.status, input.hasConfirmedPayment)) {
-      throw new Error('Solo se puede cancelar un pedido que aún no se pagó y no se envió');
+      throw new Error('Este pedido ya está cancelado o devuelto');
+    }
+    return;
+  }
+
+  if (input.action === 'returnOrder') {
+    if (!canReturnOrder(input.status, input.hasConfirmedPayment)) {
+      throw new Error('Solo se puede reembolsar un pedido que ya tiene un cobro confirmado');
     }
     return;
   }

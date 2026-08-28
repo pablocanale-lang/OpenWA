@@ -74,6 +74,7 @@
 
 .orders-page .table-wrap {
   overflow-x: auto;
+  overflow-y: visible;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--bg-white);
@@ -160,6 +161,90 @@
   flex-wrap: wrap;
   gap: 0.4rem;
   align-items: center;
+}
+
+.orders-shipping-input {
+  width: 7.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--bg-white);
+}
+
+.orders-invoice {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.orders-menu {
+  position: relative;
+}
+
+.orders-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-white);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.orders-menu-trigger:hover,
+.orders-menu.open .orders-menu-trigger {
+  background: var(--bg-light);
+  color: var(--text-primary);
+}
+
+.orders-menu-pop {
+  position: fixed;
+  z-index: 900;
+  min-width: 13.75rem;
+  overflow: auto;
+  background: var(--bg-white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  padding: 0.35rem;
+}
+
+.orders-menu-label {
+  margin: 0;
+  padding: 0.35rem 0.5rem 0.2rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.orders-menu-pop button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.orders-menu-pop button:hover {
+  background: var(--bg-light);
+}
+
+.orders-menu-pop button.danger {
+  color: #b91c1c;
 }
 
 .order-stage {

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { GripVertical, Plus, Trash2 } from 'lucide-react';
 import type { KamproProduct } from '../../services/kamproApi';
@@ -55,6 +55,17 @@ export function OrderProductLines({ products, lines, disabled, onChange }: Props
   const catalog = Object.fromEntries(products.map(p => [p.sku, p]));
   const total = quoteLinesTotalPyg(lines);
 
+  useEffect(() => {
+    let changed = false;
+    const next = lines.map(line => {
+      const product = products.find(item => item.sku === line.sku);
+      if (!product || product.unitPricePyg == null || product.unitPricePyg === line.unitPrice) return line;
+      changed = true;
+      return { ...line, unitPrice: product.unitPricePyg };
+    });
+    if (changed) onChange(next);
+  }, [products, lines, onChange]);
+
   const applySku = (sku: string) => {
     const product = products.find(p => p.sku === sku);
     if (!product) return;
@@ -83,8 +94,8 @@ export function OrderProductLines({ products, lines, disabled, onChange }: Props
             type="button"
             role="listitem"
             className="order-lines__chip"
-            draggable={!disabled}
-            disabled={disabled}
+            draggable={!disabled && product.status === 'ACTIVE' && product.unitPricePyg != null}
+            disabled={disabled || product.status !== 'ACTIVE' || product.unitPricePyg == null}
             title={t('orders.dragHint')}
             onDragStart={event => {
               dragged.current = true;
@@ -104,7 +115,11 @@ export function OrderProductLines({ products, lines, disabled, onChange }: Props
             <span>
               {product.sku} — {product.name}
             </span>
-            <strong>{product.unitPricePyg != null ? formatPyg(product.unitPricePyg) : t('orders.noCatalogPriceShort')}</strong>
+            <strong>
+              {product.unitPricePyg != null ? formatPyg(product.unitPricePyg) : t('orders.noCatalogPriceShort')}
+              {' · '}
+              {t('orders.stockShort', { count: product.stockQty })}
+            </strong>
           </button>
         ))}
       </div>
@@ -171,19 +186,15 @@ export function OrderProductLines({ products, lines, disabled, onChange }: Props
                     />
                   </label>
                 </div>
-                <label>
-                  {t('orders.fields.unitPrice')}
-                  <input
-                    type="number"
-                    min={0}
-                    value={line.unitPrice}
-                    disabled={disabled}
-                    onChange={e => updateLine(line.key, { unitPrice: Number(e.target.value) || 0 })}
-                  />
-                </label>
+                <p className="order-quick-panel__quote">
+                  {t('orders.fields.unitPrice')}: {formatPyg(line.unitPrice)}
+                </p>
                 <p className="order-quick-panel__quote">{formatPyg(lineTotalPyg(line))}</p>
                 {line.quantity !== 2 && <p className="order-quick-panel__hint">{t('orders.discountHint')}</p>}
                 {missingPrice && <p className="order-quick-panel__hint">{t('orders.noCatalogPrice')}</p>}
+                {product && line.quantity > product.stockQty && (
+                  <p className="order-quick-panel__hint">{t('orders.stockShortfall', { have: product.stockQty })}</p>
+                )}
               </div>
             );
           })

@@ -1,0 +1,167 @@
+.inventory-page {
+  padding: 2rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.inventory-page--loading {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+}
+
+.inventory-page .status-badge {
+  padding: 0.375rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.inventory-page .status-badge.connected {
+  background: rgba(37, 211, 102, 0.1);
+  color: var(--primary-text);
+}
+
+.inventory-page .status-badge.offline {
+  background: var(--bg-light);
+  color: var(--text-muted);
+}
+
+.inventory-offline,
+.inventory-empty {
+  background: var(--bg-white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  color: var(--text-secondary);
+}
+
+.inventory-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.inventory-stat {
+  background: var(--bg-white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.inventory-stat .label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.inventory-stat .value {
+  margin-top: 0.4rem;
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.inventory-form {
+  background: var(--bg-white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.inventory-form h2 {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+}
+
+.inventory-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.inventory-form label,
+.inventory-adjust {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.inventory-adjust {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 0.4rem;
+}
+
+.inventory-page input,
+.inventory-page select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+  background: var(--bg-white);
+  color: var(--text-primary);
+  max-width: 140px;
+}
+
+.inventory-form input {
+  max-width: none;
+}
+
+.inventory-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-white);
+}
+
+.inventory-page table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.inventory-page th,
+.inventory-page td {
+  text-align: left;
+  padding: 0.75rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.inventory-page tr.is-empty td {
+  background: rgba(220, 38, 38, 0.04);
+}
+
+.inventory-status {
+  border: 1px solid var(--border);
+  background: var(--bg-light);
+  border-radius: 9999px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.inventory-movements-row td {
+  background: var(--bg-light);
+}
+
+.inventory-movements-row ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+
+@media (max-width: 800px) {
+  .inventory-stats {
+    grid-template-columns: 1fr;
+  }
+}

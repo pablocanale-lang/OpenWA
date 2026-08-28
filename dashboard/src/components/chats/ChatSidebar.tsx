@@ -22,6 +22,9 @@ interface ChatSidebarProps {
     activeChatId?: string;
     pictures?: Record<string, string | null>;
     onSelectChat: (chat: Chat) => void;
+    followUpIds?: Set<string>;
+    followOnly?: boolean;
+    onFollowOnlyChange?: (next: boolean) => void;
   };
   channelsTab: {
     engineLoading: boolean;
@@ -89,6 +92,9 @@ function ChatSidebar({
             </span>
             {chat.kind !== 'individual' && chat.kind !== 'unknown' && (
               <span className={`chat-kind-badge kind-${chat.kind}`}>{t(`chats.kind.${chat.kind}`)}</span>
+            )}
+            {chatsTab.followUpIds?.has(chat.id) && (
+              <span className="chat-follow-badge">{t('chats.followUpBadge')}</span>
             )}
             {/* Ternary, not `&&`: a chat with no messages carries timestamp 0, and React
                 renders the number 0 as text — so `0 && <span/>` painted a literal "0"
@@ -163,6 +169,16 @@ function ChatSidebar({
           />
         </div>
 
+        {activeTab === 'chats' && chatsTab.onFollowOnlyChange && (
+          <button
+            type="button"
+            className={`chats-follow-filter${chatsTab.followOnly ? ' active' : ''}`}
+            onClick={() => chatsTab.onFollowOnlyChange!(!chatsTab.followOnly)}
+          >
+            {t('chats.followUpFilter')}
+          </button>
+        )}
+
         {/* Compose a new status — only meaningful on the Status tab. */}
         {activeTab === 'status' && (
           <button type="button" className="btn-primary status-compose-trigger" onClick={onComposeStatus}>
@@ -182,7 +198,7 @@ function ChatSidebar({
             </div>
           ) : chatsTab.chats.length === 0 ? (
             <div className="chats-list-empty">
-              <span>{t('chats.empty')}</span>
+              <span>{chatsTab.followOnly ? t('chats.followUpEmpty') : t('chats.empty')}</span>
             </div>
           ) : (
             chatsTab.chats.map(renderChatRow)

@@ -65,7 +65,8 @@
     "logs": "Registros",
     "templates": "Plantillas",
     "imports": "Importación",
-    "orders": "Pedidos"
+    "orders": "Pedidos",
+    "inventory": "Inventario"
   },
   "chats": {
     "media": {
@@ -83,6 +84,12 @@
     "sessionLabel": "Sesión de WhatsApp",
     "noPhone": "Sin teléfono",
     "searchPlaceholder": "Buscar chats...",
+    "followUp": "Seguimiento",
+    "followUpOn": "Quitar de seguimiento",
+    "followUpOff": "Marcar para seguimiento",
+    "followUpFilter": "Solo seguimiento",
+    "followUpEmpty": "Ningún chat marcado para seguimiento",
+    "followUpBadge": "Seguimiento",
     "loadingChats": "Cargando chats...",
     "empty": "Sin chats",
     "noMessageYet": "Aún sin mensajes",
@@ -979,11 +986,11 @@
   },
   "kampro": {
     "title": "Importación",
-    "subtitle": "Importación y abastecimiento de herramientas agropecuarias. El stock se actualiza al registrar una recepción.",
+    "subtitle": "Importación y abastecimiento de herramientas agropecuarias. El stock de venta se opera en Inventario; acá entra mercadería al recibir un envío.",
     "connected": "Conectado",
     "offline": "API desconectada",
     "offlineHint": "Arrancá la API de Kampro (start-kampro.bat) con OpenWA en marcha. Esta pantalla vive dentro del dashboard de OpenWA.",
-    "todoStock": "Las reglas de reposición todavía no están definidas y no se implementan.",
+    "todoStock": "La reposición automática todavía no está definida. El stock de venta se carga y ajusta en Inventario.",
     "costHint": "Los costos sin compra asociada se prorratean por cantidad entre las compras del envío.",
     "receiveHint": "La cantidad recibida entra a stock. Las unidades DANADO no. Si hay diferencia vs lo comprado y no cargás incidencia, se genera sola.",
     "reportNote": "El total en PYG solo aparece cuando cada línea está en PYG o tiene tipo de cambio. No se inventa FX.",
@@ -1063,15 +1070,20 @@
     "askLocation": "Pedir ubicación",
     "create": "Crear pedido",
     "saveData": "Guardar datos",
-    "cancelConfirm": "Este pedido aún no se pagó. ¿Cancelarlo?",
+    "cancelConfirm": "¿Cancelar este pedido?",
+    "cancelPaidConfirm": "Este pedido ya está pagado. Al cancelar se registra el reembolso y el producto vuelve al stock.",
+    "returnConfirm": "¿Devolver este pedido al inventario? El stock se recupera.",
+    "refundConfirm": "¿Registrar el reembolso y devolver el producto al stock?",
     "confirmPay": "Confirmar pago",
     "discountHint": "No hay regla de descuento para esta cantidad: dejá 0 o cargá un % a mano.",
-    "noCatalogPrice": "Este SKU no tiene precio de venta. Cargá el precio unitario o el monto a pagar.",
+    "noCatalogPrice": "Este SKU no tiene precio de venta. Cargalo en Inventario.",
     "noCatalogPriceShort": "sin precio",
+    "stockShort": "{{count}} u.",
+    "stockShortfall": "Hay {{have}} en inventario; no alcanza para este pedido.",
     "noPhone": "No se pudo leer el teléfono de este contacto.",
     "codHint": "En Asunción el cobro es siempre contraentrega. Se confirma en la entrega.",
     "prepaidHint": "Interior (encomienda) no se despacha sin transferencia confirmada.",
-    "dragHint": "Arrastrá al pedido. El precio de venta viene del catálogo de Productos.",
+    "dragHint": "Arrastrá al pedido. El precio y el stock vienen de Inventario.",
     "dropHint": "Arrastrá acá los productos del catálogo (o tocá uno para agregarlo).",
     "addProduct": "Agregar producto",
     "removeProduct": "Quitar producto",
@@ -1093,7 +1105,9 @@
       "payMethod": "Medio de pago",
       "city": "Ciudad",
       "carrier": "Transportadora",
-      "reference": "Comprobante / referencia"
+      "reference": "Comprobante / referencia",
+      "shippingCost": "Costo de envío (Gs)",
+      "invoice": "Factura"
     },
     "zone": {
       "asuncion": "Asunción y alrededores",
@@ -1111,7 +1125,8 @@
       "ENVIADO": "Enviado",
       "ENTREGADO": "Entregado",
       "CERRADO": "Cerrado",
-      "CANCELADO": "Cancelado"
+      "CANCELADO": "Cancelado",
+      "DEVUELTO": "Devuelto"
     },
     "actions": {
       "confirmPayment": "Confirmar pago",
@@ -1119,19 +1134,25 @@
       "markShipped": "Marcar enviado",
       "markDelivered": "Marcar entregado",
       "close": "Cerrar pedido",
-      "cancel": "Cancelar"
+      "cancel": "Cancelar",
+      "returnOrder": "Devolver / reembolso"
     },
     "toast": {
       "created": "Pedido creado",
       "updated": "Datos guardados",
       "advanced": "Pedido actualizado",
       "cancelled": "Pedido cancelado",
+      "returned": "Pedido devuelto; stock recuperado",
+      "statusSet": "Etapa actualizada",
+      "shippingSaved": "Costo de envío guardado",
       "error": "No se pudo guardar el pedido",
       "locationAsked": "Pedido de ubicación enviado",
       "notified": "Pedido avisado al grupo Kampro Ventas",
       "notifyFailed": "El pedido se marcó enviado, pero no se pudo avisar al grupo de WhatsApp"
     },
     "filterAll": "Todos",
+    "moreActions": "Más acciones",
+    "setStatus": "Cambiar etapa",
     "tab": {
       "current": "Pedido actual",
       "new": "Nuevo"
@@ -1140,12 +1161,57 @@
       "date": "Fecha",
       "client": "Cliente",
       "amount": "Monto (Gs)",
+      "shipping": "Costo envío (Gs)",
+      "invoice": "Factura",
       "stage": "Etapa",
       "action": "Acción"
     },
     "zoneShort": {
       "asuncion": "Asunción",
       "interior": "Interior"
+    }
+  },
+  "inventory": {
+    "subtitle": "Unidades disponibles y precio de venta. Los pedidos toman el precio de acá y descuentan stock al crear. Cancelar, reembolso o devolución devuelve las unidades.",
+    "offlineHint": "Arrancá la API de Kampro (start-kampro.bat) con OpenWA en marcha.",
+    "addTitle": "Cargar producto",
+    "add": "Guardar producto",
+    "empty": "Todavía no hay productos. Cargá el primer SKU acá.",
+    "adjust": "Ajustar",
+    "adjustHint": "Ingresá un número positivo o negativo distinto de 0.",
+    "savePrice": "Guardar precio",
+    "movements": "Movimientos",
+    "noMovements": "Todavía no hay movimientos de stock.",
+    "fields": {
+      "sku": "SKU",
+      "name": "Nombre",
+      "capacity": "Capacidad (ml)",
+      "stock": "Unidades",
+      "price": "Precio de venta (Gs)",
+      "status": "Estado",
+      "actions": "Acciones"
+    },
+    "status": {
+      "active": "Activo",
+      "inactive": "Inactivo"
+    },
+    "stats": {
+      "skus": "SKUs",
+      "units": "Unidades en stock",
+      "withPrice": "Con precio de venta"
+    },
+    "reason": {
+      "RECEPCION": "Recepción",
+      "AJUSTE": "Ajuste",
+      "VENTA": "Venta",
+      "CANCELACION_PEDIDO": "Pedido cancelado",
+      "DEVOLUCION": "Devolución / reembolso"
+    },
+    "toast": {
+      "created": "Producto cargado",
+      "priceSaved": "Precio de venta guardado",
+      "stockSaved": "Stock actualizado",
+      "error": "No se pudo guardar"
     }
   }
 }

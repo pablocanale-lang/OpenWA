@@ -4,7 +4,7 @@ import { Trans, useTranslation } from 'react-i18next';
 import { nextReconnectState } from '../utils/reconnectState';
 import { applyIncomingToChatList } from '../utils/chatList';
 import { filterChats, filterChannels, groupStatusesByContact } from '../utils/chatFilters';
-import { ArrowLeft, Loader2, Megaphone, CircleDashed, AlertCircle, MessageSquare, ShoppingBag } from 'lucide-react';
+import { ArrowLeft, Bookmark, Loader2, Megaphone, CircleDashed, AlertCircle, MessageSquare, ShoppingBag } from 'lucide-react';
 import { useProfilePicture } from '../hooks/useProfilePicture';
 import { useProfilePictures } from '../hooks/useProfilePictures';
 import { useResolvedPhone } from '../hooks/useResolvedPhone';
@@ -49,6 +49,7 @@ import ChatComposer, { type StagedAttachment } from '../components/chats/ChatCom
 import { OrderQuickPanel } from '../components/chats/OrderQuickPanel';
 import StatusMedia from '../components/chats/StatusMedia';
 import StatusComposeModal from '../components/chats/StatusComposeModal';
+import { bootstrapKamproKey, kamproFetch } from '../services/kamproApi';
 import './Chats.css';
 
 // Quiet window for coalescing mark-as-read RPCs (see markReadCoalescer below).
@@ -135,6 +136,8 @@ export function Chats() {
   // press on another tab doesn't leave a Chats-tab room rendered underneath a Channels/Status list.
   const [activeTab, setActiveTab] = useState<'chats' | 'channels' | 'status'>('chats');
   const [orderPanelOpen, setOrderPanelOpen] = useState(false);
+  const [followOnly, setFollowOnly] = useState(false);
+  const [kamproOnline, setKamproOnline] = useState(false);
   const switchTab = useCallback((tab: 'chats' | 'channels' | 'status') => {
     setActiveTab(tab);
     setActiveChat(null);
@@ -172,6 +175,24 @@ export function Chats() {
   // itself — state, contacts query, submit — is components/chats/StatusComposeModal.
   const [composeOpen, setComposeOpen] = useState<boolean>(false);
 
+  useEffect(() => {
+    void bootstrapKamproKey().then(setKamproOnline);
+  }, []);
+
+  const followUpsQ = useQuery({
+    queryKey: ['kampro', 'follow-ups', selectedSessionId],
+    queryFn: () =>
+      kamproFetch<Array<{ chatId: string }>>(
+        `/follow-ups?sessionId=${encodeURIComponent(selectedSessionId)}`,
+      ),
+    enabled: kamproOnline && Boolean(selectedSessionId),
+    refetchInterval: 8000,
+  });
+  const followUpIds = useMemo(
+    () => new Set((followUpsQ.data ?? []).map(row => row.chatId)),
+    [followUpsQ.data],
+  );
+
   const {
     data: messages = [],
     isLoading: loadingMessages,
@@ -179,6 +200,24 @@ export function Chats() {
   } = useChatMessages(selectedSessionId, activeChat?.id ?? null);
   const { appendMessage, updateMessage } = useChatMessagesActions();
   const queryClient = useQueryClient();
+
+  const toggleFollowUp = useCallback(async () => {
+    if (!selectedSessionId || !activeChat) return;
+    const following = !followUpIds.has(activeChat.id);
+    try {
+      await kamproFetch('/follow-ups', {
+        method: 'PUT',
+        body: JSON.stringify({
+          sessionId: selectedSessionId,
+          chatId: activeChat.id,
+          following,
+        }),
+      });
+      await queryClient.invalidateQueries({ queryKey: ['kampro', 'follow-ups', selectedSessionId] });
+    } catch {
+      /* Kampro offline — the button stays visual-only until the API is up */
+    }
+  }, [selectedSessionId, activeChat, followUpIds, queryClient]);
 
   // Lightbox state for media viewer
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -772,7 +811,9 @@ export function Chats() {
   // One search box drives all three tabs; each matches on its own fields. Plain consts (not useMemo)
   // because chats/channelsQuery.data/statusesQuery.data are already stable, query-cached references,
   // so re-filtering on every render is cheap. See utils/chatFilters for the two status orderings.
-  const filteredChats = filterChats(chats, searchQuery);
+  const filteredChats = followOnly
+    ? filterChats(chats, searchQuery).filter(chat => followUpIds.has(chat.id))
+    : filterChats(chats, searchQuery);
   // The channels zero-state ("not subscribed to any channels") stays keyed on the UNFILTERED list
   // below, so a non-matching search renders an empty list rather than claiming there are none.
   const filteredChannels = filterChannels(channelsQuery.data ?? [], searchQuery);
@@ -867,6 +908,9 @@ export function Chats() {
               activeChatId: activeChat?.id,
               pictures: listPics.data,
               onSelectChat: setActiveChat,
+              followUpIds,
+              followOnly,
+              onFollowOnlyChange: setFollowOnly,
             }}
             channelsTab={{
               engineLoading: currentEngine.isLoading,
@@ -924,16 +968,28 @@ export function Chats() {
                       {activeChat.id}
                     </span>
                   </div>
-                  {!activeChat.isGroup && (
+                  <div className="room-header-actions">
                     <button
                       type="button"
-                      className={`room-order-toggle${orderPanelOpen ? ' active' : ''}`}
-                      onClick={() => setOrderPanelOpen(open => !open)}
+                      className={`room-follow-toggle${followUpIds.has(activeChat.id) ? ' active' : ''}`}
+                      onClick={() => void toggleFollowUp()}
+                      disabled={!kamproOnline}
+                      title={followUpIds.has(activeChat.id) ? t('chats.followUpOn') : t('chats.followUpOff')}
                     >
-                      <ShoppingBag size={16} />
-                      {t('orders.openPanel')}
+                      <Bookmark size={16} fill={followUpIds.has(activeChat.id) ? 'currentColor' : 'none'} />
+                      {t('chats.followUp')}
                     </button>
-                  )}
+                    {!activeChat.isGroup && (
+                      <button
+                        type="button"
+                        className={`room-order-toggle${orderPanelOpen ? ' active' : ''}`}
+                        onClick={() => setOrderPanelOpen(open => !open)}
+                      >
+                        <ShoppingBag size={16} />
+                        {t('orders.openPanel')}
+                      </button>
+                    )}
+                  </div>
                 </header>
 
                 {/* Messages body (list, media, reactions, scroll-to-bottom) — components/chats/ChatThread. */}

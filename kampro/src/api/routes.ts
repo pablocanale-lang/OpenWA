@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import {
   ImportCostType,
+  OrderStatus,
   OrderZone,
   PaymentMethod,
   ProductStatus,
@@ -18,6 +19,7 @@ import * as costs from '../services/costs.service.js';
 import * as receptions from '../services/receptions.service.js';
 import * as reports from '../services/reports.service.js';
 import * as orders from '../services/orders.service.js';
+import * as followUps from '../services/follow-ups.service.js';
 import type { OrderAction } from '../domain/order-transitions.js';
 
 const idParam = z.object({ id: z.string().min(1) });
@@ -26,9 +28,50 @@ const skuParam = z.object({ sku: z.string().min(1) });
 export async function apiRoutes(app: FastifyInstance) {
   app.get('/health', async () => ({ ok: true, service: 'kampro-crm' }));
 
+  app.get('/follow-ups', async (req, reply) => {
+    try {
+      const query = z.object({ sessionId: z.string().min(1) }).parse(req.query);
+      return await followUps.listFollowUps(query.sessionId);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.put('/follow-ups', async (req, reply) => {
+    try {
+      const body = z
+        .object({
+          sessionId: z.string().min(1),
+          chatId: z.string().min(1),
+          following: z.boolean(),
+        })
+        .parse(req.body);
+      return await followUps.setFollowUp(body.sessionId, body.chatId, body.following);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
   app.get('/products', async (_req, reply) => {
     try {
       return await products.listProducts();
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.post('/products', async (req, reply) => {
+    try {
+      const body = z
+        .object({
+          sku: z.string().min(1),
+          name: z.string().min(1),
+          capacityMl: z.number().int().positive(),
+          unitPricePyg: z.number().int().positive(),
+          stockQty: z.number().int().nonnegative().optional(),
+        })
+        .parse(req.body);
+      return await products.createProduct(body);
     } catch (err) {
       return sendError(reply, err);
     }
@@ -47,6 +90,30 @@ export async function apiRoutes(app: FastifyInstance) {
     try {
       const { id } = idParam.parse(req.params);
       return await products.getProduct(id);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.get('/products/:id/movements', async (req, reply) => {
+    try {
+      const { id } = idParam.parse(req.params);
+      return await products.listStockMovements(id);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.post('/products/:id/stock-adjust', async (req, reply) => {
+    try {
+      const { id } = idParam.parse(req.params);
+      const body = z
+        .object({
+          delta: z.number().int(),
+          notes: z.string().optional(),
+        })
+        .parse(req.body);
+      return await products.adjustStock(id, body.delta, body.notes);
     } catch (err) {
       return sendError(reply, err);
     }
@@ -520,9 +587,22 @@ export async function apiRoutes(app: FastifyInstance) {
           paymentMethodPreferred: z.nativeEnum(PaymentMethod).nullable().optional(),
           city: z.string().nullable().optional(),
           carrier: z.string().nullable().optional(),
+          shippingCostPyg: z.number().int().nonnegative().nullable().optional(),
         })
         .parse(req.body);
       return await orders.updateOrder(id, body);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.patch('/orders/:id/shipping', async (req, reply) => {
+    try {
+      const { id } = idParam.parse(req.params);
+      const body = z
+        .object({ shippingCostPyg: z.number().int().nonnegative().nullable() })
+        .parse(req.body);
+      return await orders.updateShippingCost(id, body.shippingCostPyg);
     } catch (err) {
       return sendError(reply, err);
     }
@@ -533,11 +613,29 @@ export async function apiRoutes(app: FastifyInstance) {
       const { id } = idParam.parse(req.params);
       const body = z
         .object({
-          action: z.enum(['confirmPayment', 'markReady', 'markShipped', 'markDelivered', 'close', 'cancel']),
+          action: z.enum([
+            'confirmPayment',
+            'markReady',
+            'markShipped',
+            'markDelivered',
+            'close',
+            'cancel',
+            'returnOrder',
+          ]),
           payment: paymentBody.optional(),
         })
         .parse(req.body);
       return await orders.transitionOrder(id, body.action as OrderAction, body.payment);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.patch('/orders/:id/status', async (req, reply) => {
+    try {
+      const { id } = idParam.parse(req.params);
+      const body = z.object({ status: z.nativeEnum(OrderStatus) }).parse(req.body);
+      return await orders.setOrderStatus(id, body.status);
     } catch (err) {
       return sendError(reply, err);
     }

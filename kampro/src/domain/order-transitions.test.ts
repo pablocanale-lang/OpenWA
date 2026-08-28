@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   assertOrderTransition,
+  canEditShippingCost,
   initialStatusForZone,
   nextStatusForAction,
   primaryActionFor,
@@ -80,29 +81,58 @@ describe('assertOrderTransition', () => {
     assert.equal(nextStatusForAction('cancel'), 'CANCELADO');
   });
 
-  it('no se cancela si ya hay pago confirmado', () => {
-    assert.throws(
-      () =>
-        assertOrderTransition({
-          zone: 'INTERIOR',
-          status: 'PAGO_CONFIRMADO',
-          action: 'cancel',
-          hasConfirmedPayment: true,
-        }),
-      /aún no se pagó/,
+  it('se puede cancelar un pedido ya pagado (reembolso + stock)', () => {
+    assert.doesNotThrow(() =>
+      assertOrderTransition({
+        zone: 'INTERIOR',
+        status: 'PAGO_CONFIRMADO',
+        action: 'cancel',
+        hasConfirmedPayment: true,
+      }),
     );
   });
 
-  it('no se cancela un pedido ya enviado', () => {
-    assert.throws(
-      () =>
-        assertOrderTransition({
-          zone: 'ASUNCION',
-          status: 'ENVIADO',
-          action: 'cancel',
-          hasConfirmedPayment: false,
-        }),
-      /aún no se pagó/,
+  it('se puede cancelar un pedido ya enviado', () => {
+    assert.doesNotThrow(() =>
+      assertOrderTransition({
+        zone: 'ASUNCION',
+        status: 'ENVIADO',
+        action: 'cancel',
+        hasConfirmedPayment: false,
+      }),
     );
+  });
+
+  it('se puede cancelar un pedido cerrado o entregado', () => {
+    assert.doesNotThrow(() =>
+      assertOrderTransition({
+        zone: 'ASUNCION',
+        status: 'CERRADO',
+        action: 'cancel',
+        hasConfirmedPayment: true,
+      }),
+    );
+  });
+
+  it('devolución restaura stock en pedido pagado o enviado', () => {
+    assert.doesNotThrow(() =>
+      assertOrderTransition({
+        zone: 'INTERIOR',
+        status: 'PAGO_CONFIRMADO',
+        action: 'returnOrder',
+        hasConfirmedPayment: true,
+      }),
+    );
+    assert.equal(nextStatusForAction('returnOrder'), 'DEVUELTO');
+  });
+});
+
+describe('canEditShippingCost', () => {
+  it('se puede cargar desde Enviado hasta Cerrado', () => {
+    assert.equal(canEditShippingCost('ENVIADO'), true);
+    assert.equal(canEditShippingCost('ENTREGADO'), true);
+    assert.equal(canEditShippingCost('CERRADO'), true);
+    assert.equal(canEditShippingCost('CONFIRMADO'), false);
+    assert.equal(canEditShippingCost('CANCELADO'), false);
   });
 });

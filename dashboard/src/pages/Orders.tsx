@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2 } from 'lucide-react';
+import { Loader2, MoreVertical } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
 import { Modal } from '../components/Modal';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -28,7 +29,23 @@ const STAGES: OrderStatus[] = [
   'ENTREGADO',
   'CERRADO',
   'CANCELADO',
+  'DEVUELTO',
 ];
+
+const MOVE_STAGES: OrderStatus[] = [
+  'CONFIRMADO',
+  'PENDIENTE_DE_PAGO',
+  'PAGO_CONFIRMADO',
+  'LISTO_PARA_DESPACHO',
+  'ENVIADO',
+  'ENTREGADO',
+  'CERRADO',
+];
+
+function allowsShippingCost(order: KamproOrder): boolean {
+  if (order.canEditShipping === true) return true;
+  return order.status === 'ENVIADO' || order.status === 'ENTREGADO' || order.status === 'CERRADO';
+}
 
 function formatOrderDate(iso: string, locale: string): string {
   const date = new Date(iso);
@@ -43,6 +60,157 @@ function formatOrderDate(iso: string, locale: string): string {
   }).format(date);
 }
 
+function ShippingCostCell({
+  order,
+  disabled,
+  onSave,
+}: {
+  order: KamproOrder;
+  disabled: boolean;
+  onSave: (order: KamproOrder, value: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [value, setValue] = useState(order.shippingCostPyg != null ? String(order.shippingCostPyg) : '');
+
+  useEffect(() => {
+    setValue(order.shippingCostPyg != null ? String(order.shippingCostPyg) : '');
+  }, [order.id, order.shippingCostPyg]);
+
+  return (
+    <input
+      className="orders-shipping-input"
+      type="number"
+      min={0}
+      value={value}
+      disabled={disabled}
+      onChange={e => setValue(e.target.value)}
+      onBlur={e => onSave(order, e.target.value)}
+      onKeyDown={e => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+      }}
+      aria-label={t('orders.fields.shippingCost')}
+    />
+  );
+}
+
+function OrderKebabMenu({
+  order,
+  disabled,
+  open,
+  onOpenChange,
+  onMove,
+  onCancel,
+  onRefund,
+}: {
+  order: KamproOrder;
+  disabled: boolean;
+  open: boolean;
+  onOpenChange: (next: boolean) => void;
+  onMove: (status: OrderStatus) => void;
+  onCancel: () => void;
+  onRefund: () => void;
+}) {
+  const { t } = useTranslation();
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState({ top: 0, left: 0, maxHeight: 280, openUp: false });
+
+  const place = () => {
+    const btn = btnRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const width = 220;
+    const gap = 6;
+    const margin = 8;
+    const left = Math.min(Math.max(margin, rect.right - width), window.innerWidth - width - margin);
+    const spaceBelow = window.innerHeight - rect.bottom - margin;
+    const spaceAbove = rect.top - margin;
+    const openUp = spaceBelow < 240 && spaceAbove > spaceBelow;
+    const maxHeight = Math.max(160, Math.min(320, (openUp ? spaceAbove : spaceBelow) - gap));
+    setCoords({
+      top: openUp ? rect.top - gap : rect.bottom + gap,
+      left,
+      maxHeight,
+      openUp,
+    });
+  };
+
+  useLayoutEffect(() => {
+    if (open) place();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (btnRef.current?.contains(target) || popRef.current?.contains(target)) return;
+      onOpenChange(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onOpenChange(false);
+    };
+    window.addEventListener('mousedown', onPointer);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('mousedown', onPointer);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open, onOpenChange]);
+
+  return (
+    <div className={`orders-menu${open ? ' open' : ''}`}>
+      <button
+        ref={btnRef}
+        type="button"
+        className="orders-menu-trigger"
+        disabled={disabled}
+        aria-label={t('orders.moreActions')}
+        aria-expanded={open}
+        onClick={() => onOpenChange(!open)}
+      >
+        <MoreVertical size={16} />
+      </button>
+      {open
+        ? createPortal(
+            <div
+              ref={popRef}
+              className="orders-menu-pop"
+              role="menu"
+              style={{
+                top: coords.openUp ? 'auto' : coords.top,
+                bottom: coords.openUp ? window.innerHeight - coords.top : 'auto',
+                left: coords.left,
+                maxHeight: coords.maxHeight,
+              }}
+            >
+              <p className="orders-menu-label">{t('orders.setStatus')}</p>
+              {MOVE_STAGES.filter(status => status !== order.status).map(status => (
+                <button key={status} type="button" role="menuitem" onClick={() => onMove(status)}>
+                  {t(`orders.status.${status}`)}
+                </button>
+              ))}
+              {order.canCancel ? (
+                <button type="button" role="menuitem" className="danger" onClick={onCancel}>
+                  {t('orders.actions.cancel')}
+                </button>
+              ) : null}
+              {order.canReturn ? (
+                <button type="button" role="menuitem" onClick={onRefund}>
+                  {t('orders.actions.returnOrder')}
+                </button>
+              ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
+    </div>
+  );
+}
+
 export function Orders() {
   const { t, i18n } = useTranslation();
   useDocumentTitle(t('nav.orders'));
@@ -53,6 +221,8 @@ export function Orders() {
   const [stage, setStage] = useState<'all' | OrderStatus>('all');
   const [pending, setPending] = useState<KamproOrder | null>(null);
   const [cancelTarget, setCancelTarget] = useState<KamproOrder | null>(null);
+  const [returnTarget, setReturnTarget] = useState<KamproOrder | null>(null);
+  const [menuId, setMenuId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState(0);
   const [payMethod, setPayMethod] = useState<PaymentMethod>('TRANSFERENCIA');
   const [payRef, setPayRef] = useState('');
@@ -115,9 +285,15 @@ export function Orders() {
             : {}),
         }),
       });
-      await queryClient.invalidateQueries({ queryKey: ['kampro', 'orders'] });
+      await queryClient.invalidateQueries({ queryKey: ['kampro'] });
       if (stage !== 'all') setStage(updated.status);
-      toast.success(action === 'cancel' ? t('orders.toast.cancelled') : t('orders.toast.advanced'));
+      toast.success(
+        action === 'cancel'
+          ? t('orders.toast.cancelled')
+          : action === 'returnOrder'
+            ? t('orders.toast.returned')
+            : t('orders.toast.advanced'),
+      );
       if (updated.salesNotify && !updated.salesNotify.ok) {
         toast.error(t('orders.toast.notifyFailed'), updated.salesNotify.error);
       }
@@ -126,6 +302,47 @@ export function Orders() {
       }
       setPending(null);
       setCancelTarget(null);
+      setReturnTarget(null);
+      setMenuId(null);
+    } catch (err) {
+      toast.error(t('orders.toast.error'), err instanceof Error ? err.message : undefined);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const setStatus = async (order: KamproOrder, status: OrderStatus) => {
+    setSaving(true);
+    try {
+      const updated = await kamproFetch<KamproOrder>(`/orders/${order.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
+      await queryClient.invalidateQueries({ queryKey: ['kampro'] });
+      if (stage !== 'all') setStage(updated.status);
+      toast.success(t('orders.toast.statusSet'));
+      setMenuId(null);
+      setCancelTarget(null);
+      setReturnTarget(null);
+    } catch (err) {
+      toast.error(t('orders.toast.error'), err instanceof Error ? err.message : undefined);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveShipping = async (order: KamproOrder, value: string) => {
+    const trimmed = value.trim();
+    const next = trimmed === '' ? null : Math.max(0, Math.round(Number(trimmed) || 0));
+    if (next === (order.shippingCostPyg ?? null)) return;
+    setSaving(true);
+    try {
+      await kamproFetch(`/orders/${order.id}/shipping`, {
+        method: 'PATCH',
+        body: JSON.stringify({ shippingCostPyg: next }),
+      });
+      await queryClient.invalidateQueries({ queryKey: ['kampro'] });
+      toast.success(t('orders.toast.shippingSaved'));
     } catch (err) {
       toast.error(t('orders.toast.error'), err instanceof Error ? err.message : undefined);
     } finally {
@@ -188,6 +405,8 @@ export function Orders() {
                     <th>{t('orders.fields.sku')}</th>
                     <th>{t('orders.fields.zone')}</th>
                     <th>{t('orders.col.amount')}</th>
+                    <th>{t('orders.col.shipping')}</th>
+                    <th>{t('orders.col.invoice')}</th>
                     <th>{t('orders.col.stage')}</th>
                     <th>{t('orders.col.action')}</th>
                   </tr>
@@ -210,6 +429,24 @@ export function Orders() {
                       </td>
                       <td>{formatPyg(order.totalAmount)}</td>
                       <td>
+                        {allowsShippingCost(order) && canWrite ? (
+                          <ShippingCostCell order={order} disabled={saving} onSave={saveShipping} />
+                        ) : order.shippingCostPyg != null ? (
+                          formatPyg(order.shippingCostPyg)
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td>
+                        {order.invoiceNumber ? (
+                          <span className="orders-invoice" title={order.invoiceIssuer ?? undefined}>
+                            {order.invoiceNumber}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td>
                         <span className="order-stage">{t(`orders.status.${order.status}`)}</span>
                       </td>
                       <td>
@@ -224,17 +461,28 @@ export function Orders() {
                               {t(`orders.actions.${order.primaryAction}`)}
                             </button>
                           ) : null}
-                          {order.canCancel && canWrite ? (
-                            <button
-                              type="button"
-                              className="btn-danger"
+                          {canWrite ? (
+                            <OrderKebabMenu
+                              order={order}
                               disabled={saving}
-                              onClick={() => setCancelTarget(order)}
-                            >
-                              {t('orders.actions.cancel')}
-                            </button>
+                              open={menuId === order.id}
+                              onOpenChange={next => setMenuId(next ? order.id : null)}
+                              onMove={status => {
+                                setMenuId(null);
+                                void setStatus(order, status);
+                              }}
+                              onCancel={() => {
+                                setMenuId(null);
+                                setCancelTarget(order);
+                              }}
+                              onRefund={() => {
+                                setMenuId(null);
+                                setReturnTarget(order);
+                              }}
+                            />
+                          ) : !order.primaryAction ? (
+                            '—'
                           ) : null}
-                          {!order.primaryAction && !order.canCancel ? '—' : null}
                         </div>
                       </td>
                     </tr>
@@ -317,7 +565,35 @@ export function Orders() {
           ) : undefined
         }
       >
-        <p>{t('orders.cancelConfirm')}</p>
+        <p>
+          {(cancelTarget?.netPaid ?? 0) > 0 ? t('orders.cancelPaidConfirm') : t('orders.cancelConfirm')}
+        </p>
+      </Modal>
+
+      <Modal
+        open={Boolean(returnTarget)}
+        onClose={() => setReturnTarget(null)}
+        title={t('orders.actions.returnOrder')}
+        footer={
+          returnTarget ? (
+            <>
+              <button type="button" className="btn-secondary" onClick={() => setReturnTarget(null)}>
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={saving}
+                onClick={() => void runTransition(returnTarget, 'returnOrder')}
+              >
+                {saving ? <Loader2 className="animate-spin" size={16} /> : null}
+                {t('orders.actions.returnOrder')}
+              </button>
+            </>
+          ) : undefined
+        }
+      >
+        <p>{t('orders.refundConfirm')}</p>
       </Modal>
     </div>
   );

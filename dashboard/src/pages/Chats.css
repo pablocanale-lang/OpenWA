@@ -124,6 +124,25 @@
   outline: none;
 }
 
+.chats-page .chats-follow-filter {
+  margin-top: 0.6rem;
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--bg-white);
+  color: var(--text-secondary);
+  border-radius: 9999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chats-page .chats-follow-filter.active {
+  background: rgba(234, 179, 8, 0.16);
+  border-color: rgba(234, 179, 8, 0.45);
+  color: #a16207;
+}
+
 .chats-page .chats-list {
   flex: 1;
   overflow-y: auto;
@@ -283,6 +302,18 @@
   white-space: nowrap;
 }
 
+.chats-page .chat-follow-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: rgba(234, 179, 8, 0.18);
+  color: #a16207;
+  white-space: nowrap;
+}
+
 /* =============================================================================
    CHAT ROOM: Right Column
    ============================================================================= */
@@ -354,8 +385,17 @@
   box-sizing: border-box;
 }
 
-.chats-page .room-order-toggle {
+.chats-page .room-header-actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.chats-page .room-order-toggle,
+.chats-page .room-follow-toggle {
+  margin-left: 0;
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -371,10 +411,18 @@
 }
 
 .chats-page .room-order-toggle.active,
-.chats-page .room-order-toggle:hover {
+.chats-page .room-order-toggle:hover,
+.chats-page .room-follow-toggle.active,
+.chats-page .room-follow-toggle:hover {
   background: rgba(37, 211, 102, 0.12);
   border-color: rgba(37, 211, 102, 0.45);
   color: var(--primary-text);
+}
+
+.chats-page .room-follow-toggle.active {
+  background: rgba(234, 179, 8, 0.16);
+  border-color: rgba(234, 179, 8, 0.45);
+  color: #a16207;
 }
 
 /* Back-to-list control: only needed in the single-pane mobile layout; hidden on the two-pane desktop. */

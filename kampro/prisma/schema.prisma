@@ -61,6 +61,9 @@ enum ReceptionIncidentType {
 enum StockMovementReason {
   RECEPCION
   AJUSTE
+  VENTA
+  CANCELACION_PEDIDO
+  DEVOLUCION
 }
 
 model Supplier {
@@ -205,13 +208,16 @@ model StockMovement {
   quantity    Int
   reason      StockMovementReason
   receptionId String?
+  orderId     String?
   notes       String?
   createdAt   DateTime             @default(now())
 
   product   Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
   reception Reception? @relation(fields: [receptionId], references: [id], onDelete: SetNull)
+  order     Order?     @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   @@index([productId, createdAt])
+  @@index([orderId])
 }
 
 // ─── Pedidos y pagos (venta) ────────────────────────────────────────────────
@@ -230,6 +236,7 @@ enum OrderStatus {
   ENTREGADO
   CERRADO
   CANCELADO
+  DEVUELTO
 }
 
 enum PaymentMethod {
@@ -240,6 +247,7 @@ enum PaymentMethod {
 enum PaymentStatus {
   PENDIENTE
   CONFIRMADO
+  REEMBOLSADO
 }
 
 model Order {
@@ -269,16 +277,40 @@ model Order {
   /// Interior (encomienda)
   city             String?
   carrier          String?
+  /// Costo de envío (encomienda / delivery / combustible), en PYG. Se carga en Pedidos cuando está ENVIADO.
+  shippingCostPyg  Int?
+  invoiceNumber    String?
+  invoiceIssuer    String?
+  invoiceIssuedAt  DateTime?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
-  items    OrderLine[]
-  payments Payment[]
+  items          OrderLine[]
+  payments       Payment[]
+  stockMovements StockMovement[]
 
   @@index([status])
   @@index([customerPhone])
   @@index([createdAt])
   @@index([zone])
+  @@index([invoiceNumber])
+}
+
+model InvoiceSequence {
+  id         String @id @default("default")
+  nextNumber Int    @default(14)
+  issuer     String @default("Pablo Canale")
+}
+
+/// Chats de WhatsApp marcados para seguimiento (capa Kampro, por sessionId + chatId).
+model ChatFollowUp {
+  id        String   @id @default(cuid())
+  sessionId String
+  chatId    String
+  createdAt DateTime @default(now())
+
+  @@unique([sessionId, chatId])
+  @@index([sessionId])
 }
 
 model OrderLine {

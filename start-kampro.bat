@@ -28,7 +28,8 @@ start "OpenWA Dashboard" /MIN cmd /c "cd /d "%~dp0dashboard" && npm run dev"
 
 echo.
 echo [ok] Abri el dashboard de desarrollo ^(no el de Docker en :2785^):
-echo      http://127.0.0.1:2886/imports
+echo      http://127.0.0.1:2886/inventory
+echo      http://127.0.0.1:2886/orders
 echo.
 echo      Login OpenWA: dev-admin-key
 echo      WhatsApp / API: http://127.0.0.1:2785

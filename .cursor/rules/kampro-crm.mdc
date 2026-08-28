@@ -9,7 +9,7 @@ Kampro vende al por menor herramientas agropecuarias/ganaderas en Paraguay. Impo
 
 El CRM es una **capa encima de OpenWA**, no un fork del core. OpenWA solo gateway (mensajes, webhooks, API). Persistencia Kampro **propia**, vinculada por **teléfono**. Número nuevo → crear Lead. Número existente → actualizar Lead o Cliente.
 
-No generar código hasta que el usuario pida un módulo concreto. Cada módulo (Importación, Captación, Meta Ads, Pedidos, Entrega, Pagos, Facturación, Clientes, Reportes) debe ser consistente con este modelo. No inventar políticas listadas como TODO.
+No generar código hasta que el usuario pida un módulo concreto. Cada módulo (Importación, Inventario, Captación, Meta Ads, Pedidos, Entrega, Pagos, Facturación, Clientes, Reportes) debe ser consistente con este modelo. No inventar políticas listadas como TODO.
 
 ## SKUs (cada variante es independiente)
 
@@ -35,9 +35,9 @@ No generar código hasta que el usuario pida un módulo concreto. Cada módulo (
 - **Pedido**: producto/variante, cantidad, descuento, total, modalidad entrega, estado pago, estado despacho, factura asociada.
 - **Pago**: monto, medio (transferencia/efectivo), fecha, estado, comprobante/referencia.
 - **Entrega**: tipo (delivery/encomienda), datos según tipo, agencia (encomienda), fecha, estado.
-- **Factura**: número/referencia, fecha, RUC, estado, copia/foto cuando corresponda.
+- **Factura**: número (timbrado 001-001-NNNNNNN, emisor actual Pablo Canale), fecha, RUC, estado, copia/foto cuando corresponda. Se genera al confirmar el pago (encomienda) o al marcar entregado (contraentrega Asunción).
 - **Campaña/Ads**: campaña, anuncio, placement, fecha, métricas (cuando se integren).
-- **Producto**: SKU, nombre, capacidad, costo, precio, stock, estado.
+- **Inventario**: SKU, nombre, capacidad, unidades disponibles, precio de venta, estado. Alta de productos nuevos. El pedido toma el precio de acá y descuenta stock al crear; cancelar / devolver / reembolso recupera unidades.
 - **Proveedor/Compra**: proveedor, producto, cantidad, precio, forwarder, costos, fechas, recepción.
 
 ### Lead
@@ -59,7 +59,7 @@ Encomienda: `PAGO CONFIRMADO` obligatorio antes de `LISTO PARA DESPACHO`. Delive
 
 ## TODO de negocio (marcar, no resolver)
 
-- Stock: dónde se registra, cómo se descuenta, responsable.
+- Stock: criterio de reposición (cuándo pedir de nuevo, responsable). El registro, descuento por venta y recuperación por cancelación/devolución viven en Inventario.
 - Campos exactos de dirección/localización delivery Asunción.
 - Proveedor de delivery local y agencias de encomienda habituales.
 - Verificación de transferencias y quién confirma pagos.

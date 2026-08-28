@@ -38,6 +38,16 @@ export async function bootstrapKamproKey(): Promise<boolean> {
   }
 }
 
+export type KamproStockMovement = {
+  id: string;
+  productId: string;
+  quantity: number;
+  reason: 'RECEPCION' | 'AJUSTE' | 'VENTA' | 'CANCELACION_PEDIDO' | 'DEVOLUCION';
+  notes: string | null;
+  createdAt: string;
+  orderId?: string | null;
+};
+
 export type KamproProduct = {
   id: string;
   sku: string;
@@ -138,8 +148,9 @@ export type OrderStatus =
   | 'ENVIADO'
   | 'ENTREGADO'
   | 'CERRADO'
-  | 'CANCELADO';
-export type OrderAction = 'confirmPayment' | 'markReady' | 'markShipped' | 'markDelivered' | 'close' | 'cancel';
+  | 'CANCELADO'
+  | 'DEVUELTO';
+export type OrderAction = 'confirmPayment' | 'markReady' | 'markShipped' | 'markDelivered' | 'close' | 'cancel' | 'returnOrder';
 export type PaymentMethod = 'EFECTIVO' | 'TRANSFERENCIA';
 
 export type KamproPayment = {
@@ -185,12 +196,21 @@ export type KamproOrder = {
   paymentMethodPreferred: PaymentMethod | null;
   city: string | null;
   carrier: string | null;
+  shippingCostPyg: number | null;
+  invoiceNumber: string | null;
+  invoiceIssuer: string | null;
+  invoiceIssuedAt: string | null;
   createdAt: string;
   updatedAt: string;
   items: KamproOrderLine[];
   payments: KamproPayment[];
   primaryAction: OrderAction | null;
   canCancel: boolean;
+  canReturn: boolean;
+  canEditDetails: boolean;
+  canEditCommercial: boolean;
+  canEditShipping: boolean;
+  netPaid: number;
   salesNotify?: { ok: true; groupId: string } | { ok: false; error: string };
 };
 
@@ -233,6 +253,7 @@ export type UpdateOrderPayload = {
   paymentMethodPreferred?: PaymentMethod | null;
   city?: string | null;
   carrier?: string | null;
+  shippingCostPyg?: number | null;
 };
 
 export function actionNeedsPayment(order: KamproOrder, action: OrderAction): boolean {
@@ -240,5 +261,5 @@ export function actionNeedsPayment(order: KamproOrder, action: OrderAction): boo
 }
 
 export function isOpenOrder(status: OrderStatus): boolean {
-  return status !== 'CERRADO' && status !== 'CANCELADO';
+  return status !== 'CERRADO' && status !== 'CANCELADO' && status !== 'DEVUELTO';
 }
