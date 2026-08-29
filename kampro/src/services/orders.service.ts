@@ -37,6 +37,7 @@ import {
   postOrderRefund,
   postShippingCost,
   reverseOrderClose,
+  syncClosedOrderJournals,
 } from './accounting.service.js';
 
 const orderInclude = {
@@ -425,7 +426,10 @@ export async function updateOrder(id: string, input: UpdateOrderInput) {
           sortOrder: line.sortOrder,
         })),
       });
-      if (asStatus(order.status) !== 'CERRADO') {
+      if (order.status === OrderStatus.CERRADO) {
+        await restoreOrderSale(tx, id, 'CANCELACION_PEDIDO');
+        await consumeOrderSale(tx, id, lines);
+      } else {
         await applyOrderReservation(tx, id, lines);
       }
     }
@@ -474,6 +478,20 @@ export async function updateOrder(id: string, input: UpdateOrderInput) {
       const next =
         input.shippingCostPyg == null ? null : Math.max(0, Math.round(input.shippingCostPyg));
       await postShippingCost(tx, id, next, new Date());
+    }
+    if (
+      updatedOrder.status === OrderStatus.CERRADO &&
+      (lines || input.invoiceSettlement !== undefined || input.totalAmount !== undefined)
+    ) {
+      await syncClosedOrderJournals(tx, {
+        orderId: id,
+        gross: updatedOrder.totalAmount,
+        prepaid: netPaidAmount(updatedOrder.payments),
+        settlement: updatedOrder.invoiceSettlement,
+        invoiceNumber: updatedOrder.invoiceNumber,
+        items: presentItems(updatedOrder),
+        rebuildLots: Boolean(lines),
+      });
     }
     return updatedOrder;
   });

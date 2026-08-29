@@ -28,8 +28,8 @@ import {
 import { prisma } from '../db.js';
 import { splitIva11 } from '../domain/iva.js';
 import { badRequest, notFound } from '../http-error.js';
-import { postEntry, replaceEntry, reverseActive, reverseEntry } from './journal.service.js';
-import { addLot, consumeForOrder, restoreForOrder } from './fifo.service.js';
+import { findActiveEntry, postEntry, reverseActive, reverseEntry, rewriteActiveEntry } from './journal.service.js';
+import { addLot, consumeForOrder, removeLotsForPurchaseOrder, restoreForOrder } from './fifo.service.js';
 import { applyOrderReservation, restoreOrderSale } from './stock.service.js';
 
 type Tx = Prisma.TransactionClient;
@@ -161,7 +161,7 @@ export async function postShippingCost(tx: Tx, orderId: string, amountPyg: numbe
     await reverseActive(tx, JournalSource.ORDER, orderId, 'SHIPPING', datedAt);
     return null;
   }
-  return replaceEntry(tx, {
+  return rewriteActiveEntry(tx, {
     datedAt,
     memo: memo('Flete venta', orderId),
     sourceType: JournalSource.ORDER,
@@ -171,36 +171,94 @@ export async function postShippingCost(tx: Tx, orderId: string, amountPyg: numbe
   });
 }
 
-export async function postPurchasePay(
+export async function syncClosedOrderJournals(
   tx: Tx,
-  po: {
-    id: string;
-    quantity: number;
-    unitPrice: unknown;
-    freight: unknown;
-    otherCharges: unknown;
-    fxRateToPyg: unknown;
-    currency: string;
-    treasury: Treasury;
-    confirmedAt: Date;
-    lines: Array<{ productId: string; quantity: number; unitPrice: unknown }>;
+  input: {
+    orderId: string;
+    gross: number;
+    prepaid: number;
+    settlement: InvoiceSettlement;
+    invoiceNumber?: string | null;
+    items: Array<{ sku: string; quantity: number }>;
+    rebuildLots: boolean;
   },
 ) {
-  const merch = merchandiseFromLines(
-    po.lines.map((line) => ({
-      productId: line.productId,
-      quantity: line.quantity,
-      unitPrice: asString(line.unitPrice as never) ?? '0',
-    })),
-  );
-  const chinaPyg =
+  const existing = await findActiveEntry(tx, JournalSource.ORDER, input.orderId, 'CLOSE');
+  const datedAt = existing?.datedAt ?? new Date();
+  const saleMemo = saleCloseMemo(input.orderId, input.invoiceNumber);
+  await rewriteActiveEntry(tx, {
+    datedAt,
+    memo: saleMemo,
+    sourceType: JournalSource.ORDER,
+    sourceId: input.orderId,
+    event: 'CLOSE',
+    lines: linesSaleRecognition({
+      gross: input.gross,
+      settlement: input.settlement as Settlement,
+      prepaid: input.prepaid,
+      memo: saleMemo,
+    }),
+  });
+
+  if (!input.rebuildLots) return;
+
+  await restoreForOrder(tx, input.orderId);
+  let totalCogs = 0;
+  for (const line of input.items) {
+    const product = await tx.product.findUnique({ where: { sku: line.sku } });
+    if (!product) badRequest(`SKU desconocido: ${line.sku}`);
+    const consumed = await consumeForOrder(tx, input.orderId, product.id, line.quantity);
+    totalCogs += consumed.totalCostPyg;
+  }
+  if (totalCogs > 0) {
+    await rewriteActiveEntry(tx, {
+      datedAt,
+      memo: memo('CMV pedido', input.orderId),
+      sourceType: JournalSource.ORDER,
+      sourceId: input.orderId,
+      event: 'COGS',
+      lines: linesCogs(totalCogs, memo('CMV pedido', input.orderId)),
+    });
+  } else {
+    await reverseActive(tx, JournalSource.ORDER, input.orderId, 'COGS', datedAt);
+  }
+}
+
+type PurchaseJournalPo = {
+  id: string;
+  freight: unknown;
+  otherCharges: unknown;
+  fxRateToPyg: unknown;
+  currency: string;
+  lines: Array<{ productId: string; quantity: number; unitPrice: unknown }>;
+};
+
+function purchaseLines(po: PurchaseJournalPo) {
+  return po.lines.map((line) => ({
+    productId: line.productId,
+    quantity: line.quantity,
+    unitPrice: asString(line.unitPrice as never) ?? '0',
+  }));
+}
+
+export function purchaseChinaPyg(po: PurchaseJournalPo): number {
+  const merch = merchandiseFromLines(purchaseLines(po));
+  return (
     chinaCostFromMerchandise(
       merch,
       asString(po.freight as never),
       asString(po.otherCharges as never),
       asString(po.fxRateToPyg as never),
       po.currency,
-    ) ?? 0;
+    ) ?? 0
+  );
+}
+
+export async function postPurchasePay(
+  tx: Tx,
+  po: PurchaseJournalPo & { treasury: Treasury; confirmedAt: Date },
+) {
+  const chinaPyg = purchaseChinaPyg(po);
   if (chinaPyg < 1) return null;
   return postEntry(tx, {
     datedAt: po.confirmedAt,
@@ -296,6 +354,77 @@ export async function reversePurchaseClose(tx: Tx, purchaseOrderId: string, date
   await reverseActive(tx, JournalSource.PURCHASE_ORDER, purchaseOrderId, 'CLOSE', datedAt);
 }
 
+export async function syncPurchaseOrderJournals(
+  tx: Tx,
+  po: PurchaseJournalPo & {
+    status: PurchaseOrderStatus;
+    treasury: Treasury;
+    localTreasury: Treasury;
+    confirmedAt: Date | null;
+    receivedAt: Date | null;
+    customsCost: unknown;
+    dispatchCost: unknown;
+  },
+) {
+  if (po.status !== PurchaseOrderStatus.CONFIRMADA && po.status !== PurchaseOrderStatus.CERRADA) {
+    return;
+  }
+  const chinaPyg = purchaseChinaPyg(po);
+  const payAt = po.confirmedAt ?? new Date();
+  if (chinaPyg < 1) {
+    await reverseActive(tx, JournalSource.PURCHASE_ORDER, po.id, 'PAY', payAt);
+  } else {
+    await rewriteActiveEntry(tx, {
+      datedAt: payAt,
+      memo: memo('Pago OC', po.id),
+      sourceType: JournalSource.PURCHASE_ORDER,
+      sourceId: po.id,
+      event: 'PAY',
+      lines: linesPoPayment(chinaPyg, po.treasury, memo('Pago OC', po.id)),
+    });
+  }
+
+  if (po.status !== PurchaseOrderStatus.CERRADA) return;
+
+  const receivedAt = po.receivedAt ?? payAt;
+  const localGross = Math.round(
+    Number(asString(po.customsCost as never) || 0) + Number(asString(po.dispatchCost as never) || 0),
+  );
+  const localNet = splitIva11(Math.max(0, localGross)).net;
+  const merch = merchandiseFromLines(purchaseLines(po));
+  await removeLotsForPurchaseOrder(tx, po.id);
+  await rewriteActiveEntry(tx, {
+    datedAt: receivedAt,
+    memo: memo('Recepción OC', po.id),
+    sourceType: JournalSource.PURCHASE_ORDER,
+    sourceId: po.id,
+    event: 'CLOSE',
+    lines: linesPoReceive({
+      chinaPyg,
+      localGross: Math.max(0, localGross),
+      treasury: po.localTreasury,
+      memo: memo('Recepción OC', po.id),
+    }),
+  });
+  const landedNet = chinaPyg + localNet;
+  for (const line of po.lines) {
+    const share = merch > 0 ? (Number(asString(line.unitPrice as never) ?? '0') * line.quantity) / merch : 0;
+    const lineCost = Math.round(landedNet * share);
+    const unitCostPyg = line.quantity > 0 ? Math.round(lineCost / line.quantity) : 0;
+    await addLot(tx, {
+      productId: line.productId,
+      purchaseOrderId: po.id,
+      receivedAt,
+      quantity: line.quantity,
+      unitCostPyg,
+    });
+    await tx.product.update({
+      where: { id: line.productId },
+      data: { unitCostPyg },
+    });
+  }
+}
+
 export async function postExpenseJournal(
   tx: Tx,
   input: {
@@ -307,6 +436,7 @@ export async function postExpenseJournal(
     expenseAccountId?: string;
     treasury: Treasury;
     description: string;
+    rewrite?: boolean;
   },
 ) {
   const split = linesExpense({
@@ -323,14 +453,15 @@ export async function postExpenseJournal(
       delete expenseLine.role;
     }
   }
-  return postEntry(tx, {
+  const payload = {
     datedAt: input.datedAt,
     memo: input.description,
     sourceType: JournalSource.EXPENSE,
     sourceId: input.id,
     event: 'PAY',
     lines: split,
-  });
+  };
+  return input.rewrite ? rewriteActiveEntry(tx, payload) : postEntry(tx, payload);
 }
 
 export async function postStockAdjustJournal(

@@ -103,10 +103,10 @@ export async function removeLotsForPurchaseOrder(tx: Tx, purchaseOrderId: string
   const lots = await tx.inventoryLot.findMany({ where: { purchaseOrderId }, include: { consumptions: true } });
   for (const lot of lots) {
     if (lot.consumptions.length) {
-      badRequest('No se puede cancelar: parte de este lote ya se vendió. Hay que devolver esas ventas primero.');
+      badRequest('No se puede cambiar esta OC: parte del lote ya se vendió. Hay que devolver esas ventas primero.');
     }
     if (lot.qtyRemaining !== lot.qtyOriginal) {
-      badRequest('No se puede cancelar: el lote ya no está completo en inventario');
+      badRequest('No se puede cambiar esta OC: el lote ya no está completo en inventario');
     }
   }
   await tx.inventoryLot.deleteMany({ where: { purchaseOrderId } });

@@ -428,6 +428,8 @@ export async function apiRoutes(app: FastifyInstance) {
           fxRateToPyg: moneyField.nullable().optional(),
           currency: z.string().optional(),
           comments: z.string().nullable().optional(),
+          customsCost: moneyField.optional(),
+          dispatchCost: moneyField.optional(),
         })
         .parse(req.body);
       return await purchaseOrders.updatePurchaseOrder(id, body);
@@ -988,6 +990,32 @@ export async function apiRoutes(app: FastifyInstance) {
         })
         .parse(req.body);
       return await expenses.createExpense(body);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.patch('/accounting/expenses/:id', async (req, reply) => {
+    try {
+      const { id } = idParam.parse(req.params);
+      const body = z
+        .object({
+          kind: z.nativeEnum(ExpenseKind).optional(),
+          datedAt: z.coerce.date().optional(),
+          description: z.string().min(1).optional(),
+          amountGrossPyg: z
+            .preprocess(
+              (value) => (value === undefined ? undefined : parsePygInput(value)),
+              z.number().int().positive().optional(),
+            ),
+          ivaIncluded: z.boolean().optional(),
+          treasury: z.nativeEnum(TreasuryAccount).optional(),
+          accountId: z.string().min(1).optional(),
+          vendor: z.string().nullable().optional(),
+          reference: z.string().nullable().optional(),
+        })
+        .parse(req.body);
+      return await expenses.updateExpense(id, body);
     } catch (err) {
       return sendError(reply, err);
     }

@@ -939,6 +939,18 @@ export function Kampro() {
               onLinesChange={setEditLines}
               onCurrencyChange={setEditCurrency}
             />
+            {editTarget.status === 'CERRADA' ? (
+              <>
+                <label>
+                  {t('kampro.col.customs')}
+                  <input name="customsCost" inputMode="decimal" defaultValue={editTarget.customsCost ?? '0'} />
+                </label>
+                <label>
+                  {t('kampro.col.dispatch')}
+                  <input name="dispatchCost" inputMode="decimal" defaultValue={editTarget.dispatchCost ?? '0'} />
+                </label>
+              </>
+            ) : null}
           </form>
         ) : null}
       </Modal>

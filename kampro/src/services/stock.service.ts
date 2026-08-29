@@ -115,7 +115,14 @@ export async function restoreOrderSale(
   reason: 'CANCELACION_PEDIDO' | 'DEVOLUCION',
 ): Promise<void> {
   const movements = await tx.stockMovement.findMany({ where: { orderId } });
-  const sold = netByProduct(movements.filter((m) => m.reason === StockMovementReason.VENTA));
+  const sold = netByProduct(
+    movements.filter(
+      (m) =>
+        m.reason === StockMovementReason.VENTA ||
+        m.reason === StockMovementReason.CANCELACION_PEDIDO ||
+        m.reason === StockMovementReason.DEVOLUCION,
+    ),
+  );
   for (const [productId, net] of sold) {
     if (net >= 0) continue;
     const qty = -net;

@@ -27,6 +27,7 @@ import {
   postPurchaseClose,
   postPurchasePay,
   reversePurchaseClose,
+  syncPurchaseOrderJournals,
 } from './accounting.service.js';
 import { removeLotsForPurchaseOrder } from './fifo.service.js';
 
@@ -391,6 +392,8 @@ export async function updatePurchaseOrder(
     fxRateToPyg?: string | null;
     currency?: string;
     comments?: string | null;
+    customsCost?: string;
+    dispatchCost?: string;
   },
 ) {
   const existing = await prisma.purchaseOrder.findUnique({ where: { id }, include: { lines: true } });
@@ -399,6 +402,12 @@ export async function updatePurchaseOrder(
     assertCanEdit(existing.status);
   } catch (err) {
     badRequest(err instanceof Error ? err.message : 'No se puede editar');
+  }
+  if (
+    (data.customsCost !== undefined || data.dispatchCost !== undefined) &&
+    existing.status !== PurchaseOrderStatus.CERRADA
+  ) {
+    badRequest('Aduana y despacho se cargan al cerrar la OC');
   }
 
   const prevLines = linesFromRow(existing);
@@ -416,8 +425,6 @@ export async function updatePurchaseOrder(
   const forwarderId = data.forwarderId ?? existing.forwarderId;
   await requireCatalog({ productIds: nextLines.map((l) => l.productId), supplierId, forwarderId });
 
-  const nextFreight = data.freight !== undefined ? data.freight : (asString(existing.freight) ?? '0');
-  const nextOther = data.otherCharges !== undefined ? data.otherCharges : (asString(existing.otherCharges) ?? '0');
   const { currency, fxRateToPyg } =
     data.currency !== undefined || data.fxRateToPyg !== undefined
       ? currencyAndFx(
@@ -435,31 +442,9 @@ export async function updatePurchaseOrder(
   const row = await prisma.$transaction(async (tx) => {
     await applyStockDeltas(tx, id, deltas, StockMovementReason.AJUSTE, `Ajuste por edición de OC ${id.slice(-6)}`);
 
-    if (existing.status === PurchaseOrderStatus.CERRADA) {
-      const merch = merchandiseFromLines(nextLines);
-      const chinaPyg = chinaCostFromMerchandise(
-        merch,
-        nextFreight,
-        nextOther,
-        fxRateToPyg == null ? null : asString(fxRateToPyg),
-        currency,
-      );
-      const localPyg = Number(asString(existing.customsCost) || 0) + Number(asString(existing.dispatchCost) || 0);
-      if (chinaPyg != null && merch > 0) {
-        const landed = chinaPyg + localPyg;
-        for (const line of nextLines) {
-          const share = merchandiseFromLines([line]) / merch;
-          const unitCostPyg = line.quantity > 0 ? Math.round((landed * share) / line.quantity) : null;
-          if (unitCostPyg != null) {
-            await tx.product.update({ where: { id: line.productId }, data: { unitCostPyg } });
-          }
-        }
-      }
-    }
-
     await writeLines(tx, id, supplierId, nextLines);
 
-    return tx.purchaseOrder.update({
+    const updated = await tx.purchaseOrder.update({
       where: { id },
       data: {
         orderedAt: data.orderedAt,
@@ -475,9 +460,41 @@ export async function updatePurchaseOrder(
         currency,
         fxRateToPyg: data.currency !== undefined || data.fxRateToPyg !== undefined ? fxRateToPyg : undefined,
         comments: data.comments === undefined ? undefined : data.comments?.trim() || null,
+        customsCost: data.customsCost !== undefined ? dec(data.customsCost) : undefined,
+        dispatchCost: data.dispatchCost !== undefined ? dec(data.dispatchCost) : undefined,
       },
-      include,
+      include: { lines: true },
     });
+
+    const moneyTouched =
+      data.items !== undefined ||
+      data.quantity !== undefined ||
+      data.unitPrice !== undefined ||
+      data.freight !== undefined ||
+      data.otherCharges !== undefined ||
+      data.fxRateToPyg !== undefined ||
+      data.currency !== undefined ||
+      data.customsCost !== undefined ||
+      data.dispatchCost !== undefined;
+    if (moneyTouched) {
+      await syncPurchaseOrderJournals(tx, {
+        id: updated.id,
+        status: updated.status,
+        treasury: updated.treasury,
+        localTreasury: updated.localTreasury,
+        confirmedAt: updated.confirmedAt,
+        receivedAt: updated.receivedAt,
+        freight: updated.freight,
+        otherCharges: updated.otherCharges,
+        fxRateToPyg: updated.fxRateToPyg,
+        currency: updated.currency,
+        customsCost: updated.customsCost,
+        dispatchCost: updated.dispatchCost,
+        lines: linesFromRow(updated),
+      });
+    }
+
+    return tx.purchaseOrder.findUniqueOrThrow({ where: { id }, include });
   });
   return serializePo(row);
 }

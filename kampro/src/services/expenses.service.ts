@@ -102,6 +102,80 @@ export async function createExpense(input: {
   });
 }
 
+export async function updateExpense(
+  id: string,
+  input: {
+    kind?: ExpenseKind;
+    datedAt?: Date;
+    description?: string;
+    amountGrossPyg?: number;
+    ivaIncluded?: boolean;
+    treasury?: TreasuryAccount;
+    accountId?: string;
+    vendor?: string | null;
+    reference?: string | null;
+  },
+) {
+  const existing = await prisma.expense.findUnique({ where: { id }, include: { account: true } });
+  if (!existing) notFound('Gasto');
+
+  const description = input.description !== undefined ? input.description.trim() : existing.description;
+  if (!description) badRequest('La descripción del gasto es obligatoria');
+  const amountGrossPyg =
+    input.amountGrossPyg !== undefined ? parsePygInput(input.amountGrossPyg) : existing.amountGrossPyg;
+  if (!Number.isInteger(amountGrossPyg) || amountGrossPyg < 1) {
+    badRequest('El monto del gasto debe ser un entero en guaraníes mayor a 0');
+  }
+  const kind = input.kind ?? existing.kind;
+  const ivaIncluded =
+    input.ivaIncluded !== undefined ? input.ivaIncluded : existing.ivaIncluded;
+  let accountId = input.accountId ?? existing.accountId;
+  if (input.accountId) {
+    const account = await prisma.account.findUnique({ where: { id: input.accountId } });
+    if (!account) notFound('Cuenta');
+    if (account.type !== 'EXPENSE' && account.type !== 'COST') {
+      badRequest('El gasto tiene que ir a una cuenta de gasto o costo');
+    }
+    accountId = account.id;
+  } else if (input.kind && !input.accountId) {
+    const role = KIND_ROLE[kind];
+    const account = await prisma.account.findFirst({ where: { role: role as never } });
+    if (!account) badRequest('No hay cuenta de gasto para este tipo');
+    accountId = account.id;
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const expense = await tx.expense.update({
+      where: { id },
+      data: {
+        kind,
+        datedAt: input.datedAt,
+        description,
+        amountGrossPyg,
+        ivaIncluded,
+        treasury: input.treasury,
+        accountId,
+        vendor: input.vendor === undefined ? undefined : input.vendor?.trim() || null,
+        reference: input.reference === undefined ? undefined : input.reference?.trim() || null,
+      },
+      include: { account: true },
+    });
+    const role = expense.account.role ?? KIND_ROLE[expense.kind];
+    await postExpenseJournal(tx, {
+      id: expense.id,
+      datedAt: expense.datedAt,
+      gross: expense.amountGrossPyg,
+      ivaIncluded: expense.ivaIncluded,
+      expenseRole: role || 'GASTOS_GENERALES',
+      expenseAccountId: expense.accountId,
+      treasury: expense.treasury,
+      description: expense.description,
+      rewrite: true,
+    });
+    return expense;
+  });
+}
+
 export async function deleteExpense(id: string) {
   const expense = await prisma.expense.findUnique({ where: { id } });
   if (!expense) notFound('Gasto');

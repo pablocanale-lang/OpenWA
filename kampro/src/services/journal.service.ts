@@ -139,6 +139,26 @@ export async function replaceEntry(
   return postEntry(tx, { ...input, skipIfExists: false });
 }
 
+/** Corrige el asiento activo (mismo número) cuando se edita la operación de origen. */
+export async function rewriteActiveEntry(tx: Tx, input: Parameters<typeof postEntry>[1]) {
+  const existing = await findActiveEntry(tx, input.sourceType, input.sourceId, input.event);
+  if (!existing) {
+    return postEntry(tx, { ...input, skipIfExists: false });
+  }
+  const resolved = await resolveLines(tx, input.lines);
+  await tx.journalLine.deleteMany({ where: { entryId: existing.id } });
+  return tx.journalEntry.update({
+    where: { id: existing.id },
+    data: {
+      datedAt: input.datedAt,
+      memo: input.memo.trim(),
+      cashFlow: input.cashFlow ?? existing.cashFlow,
+      lines: { create: resolved },
+    },
+    include: entryInclude,
+  });
+}
+
 async function documentBySource(entries: Array<{ sourceType: JournalSource; sourceId: string }>) {
   const ids = (type: JournalSource) => [...new Set(entries.filter((e) => e.sourceType === type).map((e) => e.sourceId))];
   const orderIds = ids(JournalSource.ORDER);

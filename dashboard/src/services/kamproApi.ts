@@ -443,6 +443,7 @@ export type KamproExpense = {
   amountGrossPyg: number;
   ivaIncluded: boolean;
   treasury: TreasuryAccount;
+  accountId: string;
   vendor: string | null;
   reference: string | null;
   account: { code: string; name: string };

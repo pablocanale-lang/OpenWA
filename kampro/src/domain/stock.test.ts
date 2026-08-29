@@ -32,6 +32,15 @@ describe('stock math', () => {
     ]);
     assert.equal(net.get('p1'), 0);
   });
+
+  it('corregir una venta cerrada netea salida, restauración y nueva salida', () => {
+    const net = netByProduct([
+      { productId: 'p1', quantity: -2 },
+      { productId: 'p1', quantity: 2 },
+      { productId: 'p1', quantity: -3 },
+    ]);
+    assert.equal(net.get('p1'), -3);
+  });
 });
 
 describe('reserva vs disponible', () => {

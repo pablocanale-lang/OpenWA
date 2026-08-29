@@ -98,6 +98,7 @@ export function Accounting() {
   ]);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<KamproJournalEntry | null>(null);
+  const [editingExpense, setEditingExpense] = useState<KamproExpense | null>(null);
 
   useEffect(() => {
     void bootstrapKamproKey().then(setOnline);
@@ -157,23 +158,25 @@ export function Accounting() {
     }
     const treasury = String(data.treasury) as TreasuryAccount;
     const description = String(data.description);
+    const payload = {
+      kind: String(data.kind),
+      datedAt: isoDay(String(data.datedAt)),
+      description,
+      amountGrossPyg,
+      ivaIncluded: data.ivaIncluded === 'on',
+      treasury,
+      accountId: String(data.accountId || '') || undefined,
+      vendor: String(data.vendor || '') || null,
+      reference: String(data.reference || '') || null,
+    };
     setSaving(true);
     try {
-      await kamproFetch('/accounting/expenses', {
-        method: 'POST',
-        body: JSON.stringify({
-          kind: String(data.kind),
-          datedAt: isoDay(String(data.datedAt)),
-          description,
-          amountGrossPyg,
-          ivaIncluded: data.ivaIncluded === 'on',
-          treasury,
-          accountId: String(data.accountId || '') || undefined,
-          vendor: String(data.vendor || '') || null,
-          reference: String(data.reference || '') || null,
-        }),
+      await kamproFetch(editingExpense ? `/accounting/expenses/${editingExpense.id}` : '/accounting/expenses', {
+        method: editingExpense ? 'PATCH' : 'POST',
+        body: JSON.stringify(payload),
       });
       event.currentTarget.reset();
+      setEditingExpense(null);
       setExpenseKind('GENERAL');
       const treasuryAccount = accounts.find(account => account.role === treasury);
       if (treasuryAccount) setLedgerAccountId(treasuryAccount.id);
@@ -589,8 +592,12 @@ export function Accounting() {
           {tab === 'expenses' && (
             <>
               {canWrite && (
-                <form className="accounting-form" onSubmit={createExpense}>
-                  <h2>{t('accounting.addExpense')}</h2>
+                <form
+                  key={editingExpense?.id ?? 'new-expense'}
+                  className="accounting-form"
+                  onSubmit={createExpense}
+                >
+                  <h2>{editingExpense ? t('kampro.form.edit') : t('accounting.addExpense')}</h2>
                   <div className="form-grid">
                     <label>
                       {t('accounting.kind')}
@@ -607,23 +614,34 @@ export function Accounting() {
                     </label>
                     <label>
                       {t('accounting.col.date')}
-                      <input name="datedAt" type="date" defaultValue={bounds.to} required />
+                      <input
+                        name="datedAt"
+                        type="date"
+                        defaultValue={editingExpense ? editingExpense.datedAt.slice(0, 10) : bounds.to}
+                        required
+                      />
                     </label>
                     <label>
                       {t('accounting.amount')}
-                      <input name="amountGrossPyg" inputMode="numeric" required placeholder="222000" />
+                      <input
+                        name="amountGrossPyg"
+                        inputMode="numeric"
+                        required
+                        placeholder="222000"
+                        defaultValue={editingExpense ? String(editingExpense.amountGrossPyg) : ''}
+                      />
                       <span className="hint">{t('accounting.amountHint')}</span>
                     </label>
                     <label>
                       {t('accounting.treasury')}
-                      <select name="treasury" defaultValue="BANCO">
+                      <select name="treasury" defaultValue={editingExpense?.treasury ?? 'BANCO'}>
                         <option value="CAJA">{t('accounting.caja')}</option>
                         <option value="BANCO">{t('accounting.banco')}</option>
                       </select>
                     </label>
                     <label>
                       {t('accounting.account')}
-                      <select name="accountId">
+                      <select name="accountId" defaultValue={editingExpense?.accountId ?? ''}>
                         <option value="">{t('accounting.defaultAccount')}</option>
                         {expenseAccounts.map(account => (
                           <option key={account.id} value={account.id}>
@@ -634,22 +652,24 @@ export function Accounting() {
                     </label>
                     <label className="full">
                       {t('accounting.description')}
-                      <input name="description" required />
+                      <input name="description" required defaultValue={editingExpense?.description ?? ''} />
                     </label>
                     <label>
                       {t('accounting.vendor')}
-                      <input name="vendor" />
+                      <input name="vendor" defaultValue={editingExpense?.vendor ?? ''} />
                     </label>
                     <label>
                       {t('accounting.reference')}
-                      <input name="reference" />
+                      <input name="reference" defaultValue={editingExpense?.reference ?? ''} />
                     </label>
                     <label className="check">
                       <input
-                        key={expenseKind}
+                        key={`${editingExpense?.id ?? 'new'}-${expenseKind}`}
                         name="ivaIncluded"
                         type="checkbox"
-                        defaultChecked={expenseKind !== 'SALARIO'}
+                        defaultChecked={
+                          editingExpense ? editingExpense.ivaIncluded : expenseKind !== 'SALARIO'
+                        }
                       />
                       {t('accounting.ivaIncluded')}
                     </label>
@@ -658,6 +678,19 @@ export function Accounting() {
                     {saving ? <Loader2 className="animate-spin" size={16} /> : null}
                     {t('accounting.saveExpense')}
                   </button>
+                  {editingExpense ? (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      disabled={saving}
+                      onClick={() => {
+                        setEditingExpense(null);
+                        setExpenseKind('GENERAL');
+                      }}
+                    >
+                      {t('common.cancel')}
+                    </button>
+                  ) : null}
                 </form>
               )}
               <div className="table-wrap">
@@ -682,6 +715,17 @@ export function Accounting() {
                         <td>{expense.treasury === 'CAJA' ? t('accounting.caja') : t('accounting.banco')}</td>
                         {canWrite ? (
                           <td>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              disabled={saving}
+                              onClick={() => {
+                                setEditingExpense(expense);
+                                setExpenseKind(expense.kind);
+                              }}
+                            >
+                              {t('kampro.form.edit')}
+                            </button>
                             <button type="button" className="btn-secondary" disabled={saving} onClick={() => void undoExpense(expense.id)}>
                               {t('accounting.undo')}
                             </button>
