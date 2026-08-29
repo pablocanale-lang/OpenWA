@@ -5,6 +5,7 @@ import {
   linesCogs,
   linesCustomerPayment,
   linesExpense,
+  linesIvaRetention,
   linesPoPayment,
   linesPoReceive,
   linesSaleRecognition,
@@ -38,6 +39,13 @@ describe('armado de asientos', () => {
     assert.ok(lines.some((l) => l.role === 'CXC' && l.debit === 110_000));
     assert.ok(lines.some((l) => l.role === 'ANTICIPO_CLIENTES' && l.debit === 50_000));
     assert.ok(lines.some((l) => l.role === 'CXC' && l.credit === 50_000));
+  });
+
+  it('retención de IVA va a crédito fiscal y cierra el anticipo', () => {
+    const lines = linesIvaRetention(162_909, 'retención');
+    assert.equal(lineTotals(lines).debit, 162_909);
+    assert.ok(lines.some((l) => l.role === 'IVA_CREDITO' && l.debit === 162_909));
+    assert.ok(lines.some((l) => l.role === 'ANTICIPO_CLIENTES' && l.credit === 162_909));
   });
 
   it('CMV contra inventario', () => {

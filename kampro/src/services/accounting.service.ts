@@ -14,6 +14,7 @@ import {
   linesCustomerPayment,
   linesCustomerRefund,
   linesExpense,
+  linesIvaRetention,
   linesPoPayment,
   linesPoReceive,
   linesPoRefund,
@@ -65,6 +66,24 @@ export async function postOrderPayment(
     sourceId: input.paymentId,
     event: 'PAY',
     lines,
+  });
+}
+
+export async function postIvaRetention(
+  tx: Tx,
+  input: { orderId: string; amount: number; datedAt: Date; certificate?: string | null },
+) {
+  if (input.amount < 1) return null;
+  const text = input.certificate
+    ? `Retención IVA ${input.certificate}`
+    : memo('Retención IVA', input.orderId);
+  return postEntry(tx, {
+    datedAt: input.datedAt,
+    memo: text,
+    sourceType: JournalSource.ORDER,
+    sourceId: input.orderId,
+    event: 'IVA_RET',
+    lines: linesIvaRetention(input.amount, text),
   });
 }
 

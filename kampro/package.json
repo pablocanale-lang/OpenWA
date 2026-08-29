@@ -11,6 +11,7 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:demo": "tsx prisma/seed.ts --demo",
+    "db:import-historico": "tsx scripts/import-historico.ts",
     "db:studio": "prisma studio",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test src/domain/landed-cost.test.ts src/domain/order-pricing.test.ts src/domain/order-transitions.test.ts src/domain/order-fields.test.ts src/domain/sales-notify.test.ts src/domain/stock.test.ts src/domain/invoice-number.test.ts src/domain/purchase-orders.test.ts src/domain/business-report.test.ts src/domain/iva.test.ts src/domain/fifo.test.ts src/domain/journal.test.ts src/domain/chart-of-accounts.test.ts src/domain/accounting-posting.test.ts src/domain/pyg-input.test.ts"

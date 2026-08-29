@@ -19,6 +19,14 @@ export function linesCustomerPayment(amount: number, treasury: Treasury, memo: s
   ]);
 }
 
+/** Retención de IVA (70% del IVA /11): crédito fiscal en lugar de cobro bancario. */
+export function linesIvaRetention(amount: number, memo: string): DraftLine[] {
+  return compactDraftLines([
+    t('IVA_CREDITO', amount, 0, memo),
+    t('ANTICIPO_CLIENTES', 0, amount, memo),
+  ]);
+}
+
 export function linesCustomerRefund(amount: number, treasury: Treasury, memo: string): DraftLine[] {
   return compactDraftLines([
     t('ANTICIPO_CLIENTES', amount, 0, memo),
