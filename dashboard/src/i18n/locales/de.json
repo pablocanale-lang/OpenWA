@@ -1185,6 +1185,10 @@
       "cashSale": "Cash",
       "creditSale": "Credit"
     },
+    "closeShippingHint": "Closing requires the shipping cost Kampro paid. That amount posts the freight journal entry.",
+    "closeShippingRequired": "Enter the shipping cost to close the order",
+    "closeNeedsDelivered": "The order must be delivered before it can be closed",
+    "confirmClose": "Close order",
     "zone": {
       "asuncion": "Asunción and surroundings",
       "interior": "Interior"
@@ -1333,6 +1337,10 @@
     "saveExpense": "Save expense",
     "kind": "Type",
     "amount": "Amount (Gs, VAT included)",
+    "amountHint": "Whole guaraníes. 222000 or 222.000 both work",
+    "ledgerHint": "An expense paid from Bank does not show under Cash. Pick the account that moved.",
+    "undo": "Undo",
+    "lastSaved": "Saved: {{description}} · {{amount}}",
     "treasury": "Paid from",
     "caja": "Cash",
     "banco": "Bank",
@@ -1358,7 +1366,10 @@
       "statements": "Statements",
       "expenses": "Expenses",
       "accounts": "Chart of accounts",
-      "manual": "Manual entry"
+      "manual": "Manual entry",
+      "income": "Income statement",
+      "balance": "Balance sheet",
+      "cashflow": "Cash flow"
     },
     "col": {
       "number": "No.",
@@ -1366,7 +1377,12 @@
       "memo": "Memo",
       "origin": "Source",
       "debit": "Debit",
-      "credit": "Credit"
+      "credit": "Credit",
+      "accountCode": "Account no.",
+      "accountName": "Account name",
+      "concept": "Concept",
+      "description": "Description",
+      "document": "Invoice / voucher"
     },
     "kinds": {
       "GENERAL": "General",
@@ -1383,10 +1399,31 @@
       "EXPENSE": "Expense"
     },
     "toast": {
-      "expenseSaved": "Expense recorded",
+      "expenseSaved": "Expense recorded. It is now in the journal.",
       "accountSaved": "Account added",
-      "manualSaved": "Journal entry posted",
-      "error": "Could not save"
-    }
+      "manualSaved": "Journal entry posted. It is now in the journal.",
+      "expenseUndone": "Expense undone",
+      "error": "Could not save",
+      "entryDeleted": "Journal entry voided"
+    },
+    "incomeHint": "Income, costs, expenses and VAT for the period. Net income does not subtract VAT: VAT is a tax, not a result.",
+    "balanceHint": "Cumulative balances through the To date. Period net income is added to equity.",
+    "cashHint": "Cash and bank movements only. Inflows are treasury debits, outflows are credits.",
+    "incomeDetail": "Income",
+    "costDetail": "Costs",
+    "expenseDetail": "Expenses",
+    "taxDetail": "Taxes (VAT for the period)",
+    "ivaNet": "Output VAT − input VAT",
+    "currentAssets": "Current assets",
+    "nonCurrentAssets": "Non-current assets",
+    "currentLiabilities": "Current liabilities",
+    "inflows": "Inflows",
+    "outflows": "Outflows",
+    "openingCash": "Opening treasury balance",
+    "closingCash": "Closing treasury balance",
+    "deleteEntry": "Delete",
+    "confirmDelete": "This voids the entry with a reversing entry. If it is a sales close, the order returns to Delivered so you can close it again.",
+    "reversed": "Voided",
+    "cashMovements": "Treasury movements"
   }
 }

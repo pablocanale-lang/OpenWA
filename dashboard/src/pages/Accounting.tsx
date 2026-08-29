@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
+import { Modal } from '../components/Modal';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useToast } from '../hooks/useToast';
 import { useRole } from '../hooks/useRole';
@@ -16,10 +17,54 @@ import {
   type KamproStatements,
   type TreasuryAccount,
 } from '../services/kamproApi';
-import { formatPyg } from '../utils/orderPricing';
+import { formatPyg, parsePygInput } from '../utils/orderPricing';
 import './Accounting.css';
 
-type Tab = 'journal' | 'ledger' | 'statements' | 'expenses' | 'accounts' | 'manual';
+type Tab = 'journal' | 'ledger' | 'income' | 'balance' | 'cashflow' | 'expenses' | 'accounts' | 'manual';
+const STATEMENT_TABS: Tab[] = ['income', 'balance', 'cashflow'];
+
+function StatementRows({
+  rows,
+  total,
+  totalLabel,
+  codeLabel,
+  nameLabel,
+  balanceLabel,
+}: {
+  rows: Array<{ code: string; name: string; balance: number }>;
+  total: number;
+  totalLabel: string;
+  codeLabel: string;
+  nameLabel: string;
+  balanceLabel: string;
+}) {
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>{codeLabel}</th>
+            <th>{nameLabel}</th>
+            <th className="num">{balanceLabel}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(row => (
+            <tr key={row.code}>
+              <td>{row.code}</td>
+              <td>{row.name}</td>
+              <td className="num">{formatPyg(row.balance)}</td>
+            </tr>
+          ))}
+          <tr className="accounting-total">
+            <td colSpan={2}>{totalLabel}</td>
+            <td className="num">{formatPyg(total)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function monthBounds() {
   const now = new Date();
@@ -51,6 +96,8 @@ export function Accounting() {
     { accountId: '', debit: '', credit: '' },
     { accountId: '', debit: '', credit: '' },
   ]);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<KamproJournalEntry | null>(null);
 
   useEffect(() => {
     void bootstrapKamproKey().then(setOnline);
@@ -78,7 +125,7 @@ export function Accounting() {
       kamproFetch<KamproStatements>(
         `/accounting/statements?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`,
       ),
-    enabled: enabled && tab === 'statements',
+    enabled: enabled && STATEMENT_TABS.includes(tab),
   });
   const expensesQ = useQuery({
     queryKey: ['kampro', 'expenses'],
@@ -101,7 +148,15 @@ export function Accounting() {
 
   const createExpense = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (saving) return;
     const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+    const amountGrossPyg = parsePygInput(data.amountGrossPyg);
+    if (!Number.isInteger(amountGrossPyg) || amountGrossPyg < 1) {
+      toast.error(t('accounting.toast.error'), t('accounting.amountHint'));
+      return;
+    }
+    const treasury = String(data.treasury) as TreasuryAccount;
+    const description = String(data.description);
     setSaving(true);
     try {
       await kamproFetch('/accounting/expenses', {
@@ -109,10 +164,10 @@ export function Accounting() {
         body: JSON.stringify({
           kind: String(data.kind),
           datedAt: isoDay(String(data.datedAt)),
-          description: String(data.description),
-          amountGrossPyg: Number(data.amountGrossPyg),
+          description,
+          amountGrossPyg,
           ivaIncluded: data.ivaIncluded === 'on',
-          treasury: String(data.treasury) as TreasuryAccount,
+          treasury,
           accountId: String(data.accountId || '') || undefined,
           vendor: String(data.vendor || '') || null,
           reference: String(data.reference || '') || null,
@@ -120,6 +175,10 @@ export function Accounting() {
       });
       event.currentTarget.reset();
       setExpenseKind('GENERAL');
+      const treasuryAccount = accounts.find(account => account.role === treasury);
+      if (treasuryAccount) setLedgerAccountId(treasuryAccount.id);
+      setLastSaved(t('accounting.lastSaved', { description, amount: formatPyg(amountGrossPyg) }));
+      setTab('journal');
       refresh();
       toast.success(t('accounting.toast.expenseSaved'));
     } catch (err) {
@@ -152,8 +211,38 @@ export function Accounting() {
     }
   };
 
+  const undoExpense = async (id: string) => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await kamproFetch(`/accounting/expenses/${id}`, { method: 'DELETE' });
+      refresh();
+      toast.success(t('accounting.toast.expenseUndone'));
+    } catch (err) {
+      toast.error(t('accounting.toast.error'), err instanceof Error ? err.message : undefined);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteEntry = async (entry: KamproJournalEntry) => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await kamproFetch(`/accounting/entries/${entry.id}`, { method: 'DELETE' });
+      setDeleteTarget(null);
+      refresh();
+      toast.success(t('accounting.toast.entryDeleted'));
+    } catch (err) {
+      toast.error(t('accounting.toast.error'), err instanceof Error ? err.message : undefined);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const createManual = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (saving) return;
     const data = Object.fromEntries(new FormData(event.currentTarget).entries());
     setSaving(true);
     try {
@@ -164,8 +253,8 @@ export function Accounting() {
           memo: String(data.memo),
           lines: manualLines.map(line => ({
             accountId: line.accountId,
-            debit: Number(line.debit || 0),
-            credit: Number(line.credit || 0),
+            debit: parsePygInput(line.debit || 0),
+            credit: parsePygInput(line.credit || 0),
           })),
         }),
       });
@@ -174,6 +263,8 @@ export function Accounting() {
         { accountId: '', debit: '', credit: '' },
       ]);
       event.currentTarget.reset();
+      setLastSaved(t('accounting.lastSaved', { description: String(data.memo), amount: '' }));
+      setTab('journal');
       refresh();
       toast.success(t('accounting.toast.manualSaved'));
     } catch (err) {
@@ -183,8 +274,13 @@ export function Accounting() {
     }
   };
 
-  const tabs: Tab[] = ['journal', 'ledger', 'statements', 'expenses', 'accounts', 'manual'];
+  const tabs: Tab[] = ['journal', 'ledger', 'income', 'balance', 'cashflow', 'expenses', 'accounts', 'manual'];
   const statements = statementsQ.data;
+  const rowLabels = {
+    codeLabel: t('accounting.col.accountCode'),
+    nameLabel: t('accounting.col.accountName'),
+    balanceLabel: t('accounting.balance'),
+  };
 
   return (
     <div className="accounting-page">
@@ -221,48 +317,73 @@ export function Accounting() {
             ))}
           </div>
 
+          {lastSaved && <p className="accounting-last-saved">{lastSaved}</p>}
+          {STATEMENT_TABS.includes(tab) && !statements && <p className="accounting-empty">{t('common.loading')}</p>}
+
           {tab === 'journal' && (
             <div className="table-wrap">
               {(entriesQ.data ?? []).length === 0 ? (
                 <p className="accounting-empty">{t('accounting.emptyJournal')}</p>
               ) : (
-                <table>
+                <table className="accounting-journal">
                   <thead>
                     <tr>
                       <th>{t('accounting.col.number')}</th>
                       <th>{t('accounting.col.date')}</th>
-                      <th>{t('accounting.col.memo')}</th>
-                      <th>{t('accounting.col.origin')}</th>
-                      <th>{t('accounting.col.debit')}</th>
-                      <th>{t('accounting.col.credit')}</th>
+                      <th>{t('accounting.col.accountCode')}</th>
+                      <th>{t('accounting.col.accountName')}</th>
+                      <th>{t('accounting.col.concept')}</th>
+                      <th>{t('accounting.col.description')}</th>
+                      <th className="num">{t('accounting.col.debit')}</th>
+                      <th className="num">{t('accounting.col.credit')}</th>
+                      <th>{t('accounting.col.document')}</th>
+                      {canWrite ? <th /> : null}
                     </tr>
                   </thead>
                   <tbody>
-                    {(entriesQ.data ?? []).map(entry => {
-                      const debit = entry.lines.reduce((s, l) => s + l.debit, 0);
-                      return (
-                        <tr key={entry.id}>
-                          <td>{entry.numberLabel}</td>
-                          <td>{entry.datedAt.slice(0, 10)}</td>
+                    {(entriesQ.data ?? []).flatMap((entry, index) =>
+                      entry.lines.map((line, lineIndex) => (
+                        <tr
+                          key={line.id}
+                          className={[
+                            lineIndex === 0 ? 'accounting-entry-start' : undefined,
+                            entry.reversed ? 'accounting-reversed' : undefined,
+                            index === 0 && lastSaved ? 'accounting-row-new' : undefined,
+                          ]
+                            .filter(Boolean)
+                            .join(' ')}
+                        >
                           <td>
-                            {entry.memo}
-                            <div className="accounting-lines">
-                              {entry.lines.map(line => (
-                                <div key={line.id}>
-                                  {line.account.code} {line.account.name} — {line.debit ? formatPyg(line.debit) : formatPyg(line.credit)}{' '}
-                                  {line.debit ? t('accounting.debit') : t('accounting.credit')}
-                                </div>
-                              ))}
-                            </div>
+                            {lineIndex === 0 ? entry.numberLabel : ''}
+                            {lineIndex === 0 && entry.reversed ? (
+                              <span className="accounting-badge">{t('accounting.reversed')}</span>
+                            ) : null}
                           </td>
-                          <td>
-                            {entry.sourceType} · {entry.event}
-                          </td>
-                          <td>{formatPyg(debit)}</td>
-                          <td>{formatPyg(debit)}</td>
+                          <td>{lineIndex === 0 ? entry.datedAt.slice(0, 10) : ''}</td>
+                          <td>{line.account.code}</td>
+                          <td>{line.account.name}</td>
+                          <td>{lineIndex === 0 ? entry.memo : ''}</td>
+                          <td>{line.memo || entry.memo}</td>
+                          <td className="num">{line.debit ? formatPyg(line.debit) : ''}</td>
+                          <td className="num">{line.credit ? formatPyg(line.credit) : ''}</td>
+                          <td>{lineIndex === 0 ? entry.documentNumber || '' : ''}</td>
+                          {canWrite ? (
+                            <td>
+                              {lineIndex === 0 && !entry.reversed && !entry.reversesId ? (
+                                <button
+                                  type="button"
+                                  className="btn-secondary"
+                                  disabled={saving}
+                                  onClick={() => setDeleteTarget(entry)}
+                                >
+                                  {t('accounting.deleteEntry')}
+                                </button>
+                              ) : null}
+                            </td>
+                          ) : null}
                         </tr>
-                      );
-                    })}
+                      )),
+                    )}
                   </tbody>
                 </table>
               )}
@@ -282,6 +403,7 @@ export function Accounting() {
                   ))}
                 </select>
               </label>
+              <p className="hint">{t('accounting.ledgerHint')}</p>
               {ledgerQ.data ? (
                 <div className="table-wrap">
                   <p>
@@ -318,50 +440,106 @@ export function Accounting() {
             </>
           )}
 
-          {tab === 'statements' && statements && (
-            <div className="accounting-statements">
-              <section>
-                <h2>{t('accounting.incomeStatement')}</h2>
+          {tab === 'income' && statements && (
+            <div className="accounting-statement">
+              <h2>{t('accounting.incomeStatement')}</h2>
+              <p className="hint">{t('accounting.incomeHint')}</p>
+              <h3>{t('accounting.incomeDetail')}</h3>
+              <StatementRows
+                rows={statements.incomeStatement.income}
+                total={statements.incomeStatement.revenue}
+                totalLabel={t('accounting.revenue')}
+                {...rowLabels}
+              />
+              <h3>{t('accounting.costDetail')}</h3>
+              <StatementRows
+                rows={statements.incomeStatement.costs}
+                total={statements.incomeStatement.costTotal}
+                totalLabel={t('accounting.cogs')}
+                {...rowLabels}
+              />
+              <p className="accounting-subtotal">
+                {t('accounting.grossMargin')}: <strong>{formatPyg(statements.incomeStatement.grossMargin)}</strong>
+              </p>
+              <h3>{t('accounting.expenseDetail')}</h3>
+              <StatementRows
+                rows={statements.incomeStatement.expenses}
+                total={statements.incomeStatement.expenseTotal}
+                totalLabel={t('accounting.expenses')}
+                {...rowLabels}
+              />
+              <h3>{t('accounting.taxDetail')}</h3>
+              <StatementRows
+                rows={statements.incomeStatement.taxes}
+                total={statements.incomeStatement.taxTotal}
+                totalLabel={t('accounting.ivaNet')}
+                {...rowLabels}
+              />
+              <p className="accounting-subtotal">
+                {t('accounting.netIncome')}: <strong>{formatPyg(statements.incomeStatement.netIncome)}</strong>
+              </p>
+            </div>
+          )}
+
+          {tab === 'balance' && statements && (
+            <div className="accounting-statement">
+              <h2>{t('accounting.balanceSheet')}</h2>
+              <p className="hint">{t('accounting.balanceHint')}</p>
+              <h3>{t('accounting.currentAssets')}</h3>
+              <StatementRows
+                rows={statements.balanceSheet.currentAssets}
+                total={statements.balanceSheet.currentAssetTotal}
+                totalLabel={t('accounting.currentAssets')}
+                {...rowLabels}
+              />
+              <h3>{t('accounting.nonCurrentAssets')}</h3>
+              <StatementRows
+                rows={statements.balanceSheet.nonCurrentAssets}
+                total={statements.balanceSheet.nonCurrentAssetTotal}
+                totalLabel={t('accounting.nonCurrentAssets')}
+                {...rowLabels}
+              />
+              <p className="accounting-subtotal">
+                {t('accounting.assets')}: <strong>{formatPyg(statements.balanceSheet.assetTotal)}</strong>
+              </p>
+              <h3>{t('accounting.currentLiabilities')}</h3>
+              <StatementRows
+                rows={statements.balanceSheet.currentLiabilities}
+                total={statements.balanceSheet.currentLiabilityTotal}
+                totalLabel={t('accounting.currentLiabilities')}
+                {...rowLabels}
+              />
+              <p className="accounting-subtotal">
+                {t('accounting.liabilities')}: <strong>{formatPyg(statements.balanceSheet.liabilityTotal)}</strong>
+              </p>
+              <h3>{t('accounting.equity')}</h3>
+              <StatementRows
+                rows={statements.balanceSheet.equity}
+                total={statements.balanceSheet.equityTotal}
+                totalLabel={t('accounting.equity')}
+                {...rowLabels}
+              />
+              <p className="accounting-subtotal">
+                {t('accounting.liabilities')} + {t('accounting.equity')}:{' '}
+                <strong>{formatPyg(statements.balanceSheet.liabilityTotal + statements.balanceSheet.equityTotal)}</strong>
+              </p>
+            </div>
+          )}
+
+          {tab === 'cashflow' && statements && (
+            <div className="accounting-statement">
+              <h2>{t('accounting.cashFlow')}</h2>
+              <p className="hint">{t('accounting.cashHint')}</p>
+              <div className="accounting-cash-summary">
                 <p>
-                  {t('accounting.revenue')}: <strong>{formatPyg(statements.incomeStatement.revenue)}</strong>
+                  {t('accounting.openingCash')}: <strong>{formatPyg(statements.cashFlow.opening)}</strong>
                 </p>
                 <p>
-                  {t('accounting.cogs')}: <strong>{formatPyg(statements.incomeStatement.costTotal)}</strong>
+                  {t('accounting.inflows')}: <strong>{formatPyg(statements.cashFlow.inflows)}</strong>
                 </p>
                 <p>
-                  {t('accounting.grossMargin')}: <strong>{formatPyg(statements.incomeStatement.grossMargin)}</strong>
+                  {t('accounting.outflows')}: <strong>{formatPyg(statements.cashFlow.outflows)}</strong>
                 </p>
-                <p>
-                  {t('accounting.expenses')}: <strong>{formatPyg(statements.incomeStatement.expenseTotal)}</strong>
-                </p>
-                <p>
-                  {t('accounting.netIncome')}: <strong>{formatPyg(statements.incomeStatement.netIncome)}</strong>
-                </p>
-              </section>
-              <section>
-                <h2>{t('accounting.balanceSheet')}</h2>
-                <p>
-                  {t('accounting.assets')}: <strong>{formatPyg(statements.balanceSheet.assetTotal)}</strong>
-                </p>
-                {(statements.balanceSheet.assets.filter(a => a.balance) ?? []).map(row => (
-                  <p key={row.code}>
-                    {row.code} {row.name}: {formatPyg(row.balance)}
-                  </p>
-                ))}
-                <p>
-                  {t('accounting.liabilities')}: <strong>{formatPyg(statements.balanceSheet.liabilityTotal)}</strong>
-                </p>
-                {statements.balanceSheet.liabilities.filter(a => a.balance).map(row => (
-                  <p key={row.code}>
-                    {row.code} {row.name}: {formatPyg(row.balance)}
-                  </p>
-                ))}
-                <p>
-                  {t('accounting.equity')}: <strong>{formatPyg(statements.balanceSheet.equityTotal)}</strong>
-                </p>
-              </section>
-              <section>
-                <h2>{t('accounting.cashFlow')}</h2>
                 <p>
                   {t('accounting.operating')}: <strong>{formatPyg(statements.cashFlow.operating)}</strong>
                 </p>
@@ -374,7 +552,37 @@ export function Accounting() {
                 <p>
                   {t('accounting.netCash')}: <strong>{formatPyg(statements.cashFlow.net)}</strong>
                 </p>
-              </section>
+                <p>
+                  {t('accounting.closingCash')}: <strong>{formatPyg(statements.cashFlow.closing)}</strong>
+                </p>
+              </div>
+              <h3>{t('accounting.cashMovements')}</h3>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{t('accounting.col.number')}</th>
+                      <th>{t('accounting.col.date')}</th>
+                      <th>{t('accounting.col.accountName')}</th>
+                      <th>{t('accounting.col.concept')}</th>
+                      <th className="num">{t('accounting.inflows')}</th>
+                      <th className="num">{t('accounting.outflows')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {statements.cashFlow.lines.map((line, index) => (
+                      <tr key={`${line.numberLabel}-${index}`}>
+                        <td>{line.numberLabel}</td>
+                        <td>{String(line.datedAt).slice(0, 10)}</td>
+                        <td>{line.account}</td>
+                        <td>{line.memo}</td>
+                        <td className="num">{line.debit ? formatPyg(line.debit) : ''}</td>
+                        <td className="num">{line.credit ? formatPyg(line.credit) : ''}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
@@ -403,7 +611,8 @@ export function Accounting() {
                     </label>
                     <label>
                       {t('accounting.amount')}
-                      <input name="amountGrossPyg" type="number" min={1} required />
+                      <input name="amountGrossPyg" inputMode="numeric" required placeholder="222000" />
+                      <span className="hint">{t('accounting.amountHint')}</span>
                     </label>
                     <label>
                       {t('accounting.treasury')}
@@ -460,6 +669,7 @@ export function Accounting() {
                       <th>{t('accounting.description')}</th>
                       <th>{t('accounting.amount')}</th>
                       <th>{t('accounting.treasury')}</th>
+                      {canWrite ? <th /> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -470,6 +680,13 @@ export function Accounting() {
                         <td>{expense.description}</td>
                         <td>{formatPyg(expense.amountGrossPyg)}</td>
                         <td>{expense.treasury === 'CAJA' ? t('accounting.caja') : t('accounting.banco')}</td>
+                        {canWrite ? (
+                          <td>
+                            <button type="button" className="btn-secondary" disabled={saving} onClick={() => void undoExpense(expense.id)}>
+                              {t('accounting.undo')}
+                            </button>
+                          </td>
+                        ) : null}
                       </tr>
                     ))}
                   </tbody>
@@ -610,6 +827,33 @@ export function Accounting() {
               </button>
             </form>
           )}
+
+          <Modal
+            open={Boolean(deleteTarget)}
+            onClose={() => setDeleteTarget(null)}
+            title={t('accounting.deleteEntry')}
+            footer={
+              deleteTarget ? (
+                <>
+                  <button type="button" className="btn-secondary" onClick={() => setDeleteTarget(null)}>
+                    {t('common.cancel')}
+                  </button>
+                  <button type="button" className="btn-danger" disabled={saving} onClick={() => void deleteEntry(deleteTarget)}>
+                    {saving ? <Loader2 className="animate-spin" size={16} /> : null}
+                    {t('accounting.deleteEntry')}
+                  </button>
+                </>
+              ) : undefined
+            }
+          >
+            <p>{t('accounting.confirmDelete')}</p>
+            {deleteTarget ? (
+              <p>
+                <strong>{deleteTarget.numberLabel}</strong> · {deleteTarget.memo}
+                {deleteTarget.documentNumber ? ` · ${deleteTarget.documentNumber}` : ''}
+              </p>
+            ) : null}
+          </Modal>
         </>
       )}
     </div>

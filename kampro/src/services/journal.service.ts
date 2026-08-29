@@ -5,7 +5,10 @@ import { assertBalanced, compactDraftLines, formatJournalNumber, reverseLines, t
 import { roleIds } from './accounts.service.js';
 
 type Tx = Prisma.TransactionClient;
-const entryInclude = { lines: { include: { account: true }, orderBy: { sortOrder: 'asc' as const } } };
+const entryInclude = {
+  lines: { include: { account: true }, orderBy: { sortOrder: 'asc' as const } },
+  reversedBy: { select: { id: true, numberLabel: true } },
+};
 
 export async function findActiveEntry(tx: Tx, sourceType: JournalSource, sourceId: string, event: string) {
   const rows = await tx.journalEntry.findMany({
@@ -136,23 +139,78 @@ export async function replaceEntry(
   return postEntry(tx, { ...input, skipIfExists: false });
 }
 
+async function documentBySource(entries: Array<{ sourceType: JournalSource; sourceId: string }>) {
+  const ids = (type: JournalSource) => [...new Set(entries.filter((e) => e.sourceType === type).map((e) => e.sourceId))];
+  const orderIds = ids(JournalSource.ORDER);
+  const paymentIds = ids(JournalSource.PAYMENT);
+  const expenseIds = ids(JournalSource.EXPENSE);
+  const poIds = ids(JournalSource.PURCHASE_ORDER);
+  const [orders, payments, expenses, purchaseOrders] = await Promise.all([
+    orderIds.length
+      ? prisma.order.findMany({ where: { id: { in: orderIds } }, select: { id: true, invoiceNumber: true } })
+      : [],
+    paymentIds.length
+      ? prisma.payment.findMany({
+          where: { id: { in: paymentIds } },
+          select: { id: true, reference: true, order: { select: { invoiceNumber: true } } },
+        })
+      : [],
+    expenseIds.length
+      ? prisma.expense.findMany({ where: { id: { in: expenseIds } }, select: { id: true, reference: true } })
+      : [],
+    poIds.length
+      ? prisma.purchaseOrder.findMany({
+          where: { id: { in: poIds } },
+          select: { id: true, invoices: { select: { invoiceNumber: true }, take: 1, orderBy: { issuedAt: 'desc' } } },
+        })
+      : [],
+  ]);
+  const orderMap = new Map(orders.map((row) => [row.id, row.invoiceNumber]));
+  const paymentMap = new Map(
+    payments.map((row) => [row.id, row.reference || row.order.invoiceNumber]),
+  );
+  const expenseMap = new Map(expenses.map((row) => [row.id, row.reference]));
+  const poMap = new Map(purchaseOrders.map((row) => [row.id, row.invoices[0]?.invoiceNumber ?? null]));
+  return (sourceType: JournalSource, sourceId: string): string | null => {
+    if (sourceType === JournalSource.ORDER) return orderMap.get(sourceId) ?? null;
+    if (sourceType === JournalSource.PAYMENT) return paymentMap.get(sourceId) ?? null;
+    if (sourceType === JournalSource.EXPENSE) return expenseMap.get(sourceId) ?? null;
+    if (sourceType === JournalSource.PURCHASE_ORDER) return poMap.get(sourceId) ?? null;
+    return null;
+  };
+}
+
+function presentEntry<T extends { sourceType: JournalSource; sourceId: string; reversedBy?: { id: string } | null }>(
+  entry: T,
+  documentOf: (sourceType: JournalSource, sourceId: string) => string | null,
+) {
+  return {
+    ...entry,
+    reversed: Boolean(entry.reversedBy),
+    documentNumber: documentOf(entry.sourceType, entry.sourceId),
+  };
+}
+
 export async function listEntries(filters?: { from?: Date; to?: Date; sourceId?: string; accountId?: string }) {
-  return prisma.journalEntry.findMany({
+  const rows = await prisma.journalEntry.findMany({
     where: {
       datedAt: filters?.from || filters?.to ? { gte: filters.from, lte: filters.to } : undefined,
       sourceId: filters?.sourceId,
       lines: filters?.accountId ? { some: { accountId: filters.accountId } } : undefined,
     },
     include: entryInclude,
-    orderBy: [{ datedAt: 'desc' }, { number: 'desc' }],
+    orderBy: { number: 'desc' },
     take: 500,
   });
+  const documentOf = await documentBySource(rows);
+  return rows.map((row) => presentEntry(row, documentOf));
 }
 
 export async function getEntry(id: string) {
   const entry = await prisma.journalEntry.findUnique({ where: { id }, include: entryInclude });
   if (!entry) notFound('Asiento');
-  return entry;
+  const documentOf = await documentBySource([entry]);
+  return presentEntry(entry, documentOf);
 }
 
 export async function ledger(accountId: string, from?: Date, to?: Date) {
@@ -182,6 +240,7 @@ type StatementAccount = {
   code: string;
   name: string;
   type: string;
+  role: string | null;
   debit: number;
   credit: number;
   balance: number;
@@ -210,6 +269,7 @@ export async function trialBalances(from?: Date, to?: Date) {
       code: account.code,
       name: account.name,
       type: account.type,
+      role: account.role,
       debit,
       credit,
       balance: signedBalance(account.type, debit, credit),
@@ -218,21 +278,44 @@ export async function trialBalances(from?: Date, to?: Date) {
   return rows;
 }
 
+function withResultado(equity: StatementAccount[], netIncome: number): StatementAccount[] {
+  return [
+    ...equity,
+    {
+      id: 'resultado',
+      code: '3.1.03',
+      name: 'Resultado del ejercicio',
+      type: 'EQUITY',
+      role: 'RESULTADO_EJERCICIO',
+      debit: 0,
+      credit: 0,
+      balance: netIncome,
+    },
+  ];
+}
+
 export async function financialStatements(from: Date, to: Date) {
   const period = await trialBalances(from, to);
   const allTime = await trialBalances(undefined, to);
+  const prior = await trialBalances(undefined, new Date(from.getTime() - 1));
   const income = period.filter((a) => a.type === 'INCOME');
   const costs = period.filter((a) => a.type === 'COST');
   const expenses = period.filter((a) => a.type === 'EXPENSE');
+  const taxes = period.filter((a) => a.role === 'IVA_DEBITO' || a.role === 'IVA_CREDITO');
   const revenue = income.reduce((s, a) => s + a.balance, 0);
   const costTotal = costs.reduce((s, a) => s + a.balance, 0);
   const expenseTotal = expenses.reduce((s, a) => s + a.balance, 0);
+  const taxTotal = taxes.reduce((s, a) => s + a.balance, 0);
   const netIncome = revenue - costTotal - expenseTotal;
 
   const assets = allTime.filter((a) => a.type === 'ASSET');
+  const currentAssets = assets.filter((a) => a.code.startsWith('1.1'));
+  const nonCurrentAssets = assets.filter((a) => a.code.startsWith('1.2'));
   const liabilities = allTime.filter((a) => a.type === 'LIABILITY');
+  const currentLiabilities = liabilities.filter((a) => a.code.startsWith('2.1'));
   const equity = allTime.filter((a) => a.type === 'EQUITY' && a.code !== '3.1.03');
-  const equityTotal = equity.reduce((s, a) => s + a.balance, 0) + netIncome;
+  const equityRows = withResultado(equity, netIncome);
+  const equityTotal = equityRows.reduce((s, a) => s + a.balance, 0);
 
   const treasuryIds = new Set(
     (await prisma.account.findMany({ where: { role: { in: ['CAJA', 'BANCO'] } } })).map((a) => a.id),
@@ -243,15 +326,23 @@ export async function financialStatements(from: Date, to: Date) {
       entry: { datedAt: { gte: from, lte: to } },
     },
     include: { entry: true, account: true },
-    orderBy: { entry: { datedAt: 'asc' } },
+    orderBy: [{ entry: { number: 'desc' } }, { sortOrder: 'asc' }],
   });
   const cashFlow = { operating: 0, investing: 0, financing: 0 };
+  let inflows = 0;
+  let outflows = 0;
   for (const line of cashLines) {
     const net = line.debit - line.credit;
+    inflows += line.debit;
+    outflows += line.credit;
     if (line.entry.cashFlow === 'INVESTING') cashFlow.investing += net;
     else if (line.entry.cashFlow === 'FINANCING') cashFlow.financing += net;
     else cashFlow.operating += net;
   }
+  const opening = prior
+    .filter((a) => a.role === 'CAJA' || a.role === 'BANCO')
+    .reduce((s, a) => s + a.balance, 0);
+  const net = cashFlow.operating + cashFlow.investing + cashFlow.financing;
 
   return {
     from: from.toISOString(),
@@ -260,34 +351,35 @@ export async function financialStatements(from: Date, to: Date) {
       income,
       costs,
       expenses,
+      taxes,
       revenue,
       costTotal,
       expenseTotal,
+      taxTotal,
       grossMargin: revenue - costTotal,
       netIncome,
     },
     balanceSheet: {
+      currentAssets,
+      nonCurrentAssets,
       assets,
+      currentLiabilities,
       liabilities,
-      equity: [
-        ...equity,
-        {
-          id: 'resultado',
-          code: '3.1.03',
-          name: 'Resultado del ejercicio',
-          type: 'EQUITY',
-          debit: 0,
-          credit: 0,
-          balance: netIncome,
-        },
-      ],
+      equity: equityRows,
+      currentAssetTotal: currentAssets.reduce((s, a) => s + a.balance, 0),
+      nonCurrentAssetTotal: nonCurrentAssets.reduce((s, a) => s + a.balance, 0),
       assetTotal: assets.reduce((s, a) => s + a.balance, 0),
+      currentLiabilityTotal: currentLiabilities.reduce((s, a) => s + a.balance, 0),
       liabilityTotal: liabilities.reduce((s, a) => s + a.balance, 0),
       equityTotal,
     },
     cashFlow: {
       ...cashFlow,
-      net: cashFlow.operating + cashFlow.investing + cashFlow.financing,
+      opening,
+      inflows,
+      outflows,
+      net,
+      closing: opening + net,
       lines: cashLines.map((line) => ({
         datedAt: line.entry.datedAt,
         numberLabel: line.entry.numberLabel,

@@ -339,6 +339,10 @@ export function actionNeedsPayment(order: KamproOrder, action: OrderAction): boo
   return action === 'confirmPayment' || (action === 'markDelivered' && order.zone === 'ASUNCION');
 }
 
+export function actionNeedsShipping(action: OrderAction): boolean {
+  return action === 'close';
+}
+
 export function isOpenOrder(status: OrderStatus): boolean {
   return status !== 'CERRADO' && status !== 'CANCELADO' && status !== 'DEVUELTO';
 }
@@ -419,7 +423,16 @@ export type KamproJournalEntry = {
   sourceType: string;
   sourceId: string;
   event: string;
+  reversesId: string | null;
+  reversed: boolean;
+  documentNumber: string | null;
   lines: KamproJournalLine[];
+};
+
+export type KamproStatementRow = {
+  code: string;
+  name: string;
+  balance: number;
 };
 
 export type KamproExpense = {
@@ -439,20 +452,28 @@ export type KamproStatements = {
   from: string;
   to: string;
   incomeStatement: {
-    income: Array<{ code: string; name: string; balance: number }>;
-    costs: Array<{ code: string; name: string; balance: number }>;
-    expenses: Array<{ code: string; name: string; balance: number }>;
+    income: KamproStatementRow[];
+    costs: KamproStatementRow[];
+    expenses: KamproStatementRow[];
+    taxes: KamproStatementRow[];
     revenue: number;
     costTotal: number;
     expenseTotal: number;
+    taxTotal: number;
     grossMargin: number;
     netIncome: number;
   };
   balanceSheet: {
-    assets: Array<{ code: string; name: string; balance: number }>;
-    liabilities: Array<{ code: string; name: string; balance: number }>;
-    equity: Array<{ code: string; name: string; balance: number }>;
+    currentAssets: KamproStatementRow[];
+    nonCurrentAssets: KamproStatementRow[];
+    assets: KamproStatementRow[];
+    currentLiabilities: KamproStatementRow[];
+    liabilities: KamproStatementRow[];
+    equity: KamproStatementRow[];
+    currentAssetTotal: number;
+    nonCurrentAssetTotal: number;
     assetTotal: number;
+    currentLiabilityTotal: number;
     liabilityTotal: number;
     equityTotal: number;
   };
@@ -460,7 +481,11 @@ export type KamproStatements = {
     operating: number;
     investing: number;
     financing: number;
+    opening: number;
+    inflows: number;
+    outflows: number;
     net: number;
+    closing: number;
     lines: Array<{
       datedAt: string;
       numberLabel: string;

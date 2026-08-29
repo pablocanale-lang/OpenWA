@@ -29,7 +29,11 @@ import * as followUps from '../services/follow-ups.service.js';
 import * as accounts from '../services/accounts.service.js';
 import * as journal from '../services/journal.service.js';
 import * as expenses from '../services/expenses.service.js';
+import * as accounting from '../services/accounting.service.js';
+import { parsePygInput } from '../domain/pyg-input.js';
 import type { OrderAction } from '../domain/order-transitions.js';
+
+const pygAmount = z.preprocess((value) => parsePygInput(value), z.number().int().nonnegative());
 
 const idParam = z.object({ id: z.string().min(1) });
 const skuParam = z.object({ sku: z.string().min(1) });
@@ -835,9 +839,10 @@ export async function apiRoutes(app: FastifyInstance) {
             'returnOrder',
           ]),
           payment: paymentBody.optional(),
+          shippingCostPyg: pygAmount.optional(),
         })
         .parse(req.body);
-      return await orders.transitionOrder(id, body.action as OrderAction, body.payment);
+      return await orders.transitionOrder(id, body.action as OrderAction, body.payment, body.shippingCostPyg);
     } catch (err) {
       return sendError(reply, err);
     }
@@ -902,6 +907,15 @@ export async function apiRoutes(app: FastifyInstance) {
     }
   });
 
+  app.delete('/accounting/entries/:id', async (req, reply) => {
+    try {
+      const { id } = idParam.parse(req.params);
+      return await accounting.deleteJournalEntry(id);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
   app.get('/accounting/ledger/:accountId', async (req, reply) => {
     try {
       const { accountId } = z.object({ accountId: z.string().min(1) }).parse(req.params);
@@ -936,8 +950,8 @@ export async function apiRoutes(app: FastifyInstance) {
             .array(
               z.object({
                 accountId: z.string().min(1),
-                debit: z.number().int().nonnegative(),
-                credit: z.number().int().nonnegative(),
+                debit: pygAmount,
+                credit: pygAmount,
                 memo: z.string().optional(),
               }),
             )
@@ -965,7 +979,7 @@ export async function apiRoutes(app: FastifyInstance) {
           kind: z.nativeEnum(ExpenseKind),
           datedAt: z.coerce.date(),
           description: z.string().min(1),
-          amountGrossPyg: z.number().int().positive(),
+          amountGrossPyg: z.preprocess((value) => parsePygInput(value), z.number().int().positive()),
           ivaIncluded: z.boolean().optional(),
           treasury: z.nativeEnum(TreasuryAccount),
           accountId: z.string().min(1).optional(),
@@ -974,6 +988,16 @@ export async function apiRoutes(app: FastifyInstance) {
         })
         .parse(req.body);
       return await expenses.createExpense(body);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.delete('/accounting/expenses/:id', async (req, reply) => {
+    try {
+      const { id } = idParam.parse(req.params);
+      await expenses.deleteExpense(id);
+      return { ok: true };
     } catch (err) {
       return sendError(reply, err);
     }

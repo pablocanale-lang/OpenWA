@@ -1,8 +1,16 @@
 import { ExpenseKind, JournalSource, type TreasuryAccount } from '@prisma/client';
 import { prisma } from '../db.js';
+import { parsePygInput } from '../domain/pyg-input.js';
 import { badRequest, notFound } from '../http-error.js';
 import { postExpenseJournal } from './accounting.service.js';
 import { reverseActive } from './journal.service.js';
+
+function dayRangeUtc(datedAt: Date) {
+  const start = new Date(Date.UTC(datedAt.getUTCFullYear(), datedAt.getUTCMonth(), datedAt.getUTCDate()));
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { start, end };
+}
 
 const KIND_ROLE: Record<ExpenseKind, string> = {
   GENERAL: 'GASTOS_GENERALES',
@@ -32,8 +40,22 @@ export async function createExpense(input: {
 }) {
   const description = input.description.trim();
   if (!description) badRequest('La descripción del gasto es obligatoria');
-  if (!Number.isInteger(input.amountGrossPyg) || input.amountGrossPyg < 1) {
-    badRequest('El monto del gasto debe ser mayor a 0');
+  const amountGrossPyg = parsePygInput(input.amountGrossPyg);
+  if (!Number.isInteger(amountGrossPyg) || amountGrossPyg < 1) {
+    badRequest('El monto del gasto debe ser un entero en guaraníes mayor a 0');
+  }
+  const day = dayRangeUtc(input.datedAt);
+  const recent = await prisma.expense.findFirst({
+    where: {
+      description,
+      amountGrossPyg,
+      treasury: input.treasury,
+      datedAt: { gte: day.start, lt: day.end },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (recent) {
+    badRequest('Este gasto ya está cargado. Si es otro movimiento, cambiá la descripción.');
   }
   const ivaIncluded = input.ivaIncluded ?? input.kind !== ExpenseKind.SALARIO;
   let accountId = input.accountId;
@@ -56,7 +78,7 @@ export async function createExpense(input: {
         kind: input.kind,
         datedAt: input.datedAt,
         description,
-        amountGrossPyg: input.amountGrossPyg,
+        amountGrossPyg,
         ivaIncluded,
         treasury: input.treasury,
         accountId: accountId!,
@@ -69,7 +91,7 @@ export async function createExpense(input: {
     await postExpenseJournal(tx, {
       id: expense.id,
       datedAt: input.datedAt,
-      gross: input.amountGrossPyg,
+      gross: amountGrossPyg,
       ivaIncluded,
       expenseRole: role || 'GASTOS_GENERALES',
       expenseAccountId: accountId,

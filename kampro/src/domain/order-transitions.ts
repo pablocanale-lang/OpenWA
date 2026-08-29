@@ -58,6 +58,13 @@ export function canEditShippingCost(status: OrderStatus): boolean {
   return status === 'ENVIADO' || status === 'ENTREGADO' || status === 'CERRADO';
 }
 
+/** Cerrar exige el flete de Kampro ya cargado (0 vale: se cargó “sin gasto”). */
+export function assertShippingLoadedForClose(shippingCostPyg: number | null | undefined): asserts shippingCostPyg is number {
+  if (shippingCostPyg == null || !Number.isFinite(shippingCostPyg) || shippingCostPyg < 0) {
+    throw new Error('Para cerrar el pedido hay que cargar el costo de envío');
+  }
+}
+
 export function primaryActionFor(zone: OrderZone, status: OrderStatus): OrderAction | null {
   if (status === 'CERRADO' || status === 'CANCELADO' || status === 'DEVUELTO') return null;
   if (status === 'ENTREGADO') return 'close';

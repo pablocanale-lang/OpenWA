@@ -1,6 +1,7 @@
 import {
   InvoiceSettlement,
   JournalSource,
+  OrderStatus,
   PaymentMethod,
   PurchaseOrderStatus,
   type Prisma,
@@ -23,14 +24,21 @@ import {
   type Settlement,
   type Treasury,
 } from '../domain/accounting-posting.js';
+import { prisma } from '../db.js';
 import { splitIva11 } from '../domain/iva.js';
-import { postEntry, replaceEntry, reverseActive } from './journal.service.js';
+import { badRequest, notFound } from '../http-error.js';
+import { postEntry, replaceEntry, reverseActive, reverseEntry } from './journal.service.js';
 import { addLot, consumeForOrder, restoreForOrder } from './fifo.service.js';
+import { applyOrderReservation, restoreOrderSale } from './stock.service.js';
 
 type Tx = Prisma.TransactionClient;
 
 function memo(prefix: string, id: string) {
   return `${prefix} ${id.slice(-6)}`;
+}
+
+export function saleCloseMemo(orderId: string, invoiceNumber?: string | null) {
+  return invoiceNumber ? `Venta factura ${invoiceNumber}` : `Venta ${orderId.slice(-6)}`;
 }
 
 export async function postOrderPayment(
@@ -83,10 +91,11 @@ export async function postOrderClose(
     gross: number;
     prepaid: number;
     settlement: InvoiceSettlement;
+    invoiceNumber?: string | null;
     lines: Array<{ productId: string; sku: string; quantity: number }>;
   },
 ) {
-  const saleMemo = memo('Cierre venta', input.orderId);
+  const saleMemo = saleCloseMemo(input.orderId, input.invoiceNumber);
   const saleLines = linesSaleRecognition({
     gross: input.gross,
     settlement: input.settlement as Settlement,
@@ -102,10 +111,13 @@ export async function postOrderClose(
     lines: saleLines,
   });
 
-  let totalCogs = 0;
-  for (const line of input.lines) {
-    const consumed = await consumeForOrder(tx, input.orderId, line.productId, line.quantity);
-    totalCogs += consumed.totalCostPyg;
+  const already = await tx.lotConsumption.findMany({ where: { orderId: input.orderId } });
+  let totalCogs = already.reduce((sum, row) => sum + row.quantity * row.unitCostPyg, 0);
+  if (!already.length) {
+    for (const line of input.lines) {
+      const consumed = await consumeForOrder(tx, input.orderId, line.productId, line.quantity);
+      totalCogs += consumed.totalCostPyg;
+    }
   }
   if (totalCogs > 0) {
     await postEntry(tx, {
@@ -321,4 +333,58 @@ export async function postStockAdjustJournal(
       quantity: input.quantity,
     }),
   });
+}
+
+export async function refreshOrderJournalMemos() {
+  const orders = await prisma.order.findMany({
+    where: { invoiceNumber: { not: null } },
+    select: { id: true, invoiceNumber: true },
+  });
+  for (const order of orders) {
+    const nextMemo = saleCloseMemo(order.id, order.invoiceNumber);
+    const entries = await prisma.journalEntry.findMany({
+      where: { sourceType: JournalSource.ORDER, sourceId: order.id, event: 'CLOSE' },
+    });
+    for (const entry of entries) {
+      if (entry.memo === nextMemo) continue;
+      await prisma.journalEntry.update({ where: { id: entry.id }, data: { memo: nextMemo } });
+      await prisma.journalLine.updateMany({ where: { entryId: entry.id }, data: { memo: nextMemo } });
+    }
+  }
+}
+
+export async function deleteJournalEntry(id: string) {
+  const entry = await prisma.journalEntry.findUnique({
+    where: { id },
+    include: { reversedBy: true },
+  });
+  if (!entry) notFound('Asiento');
+  if (entry.reversedBy) badRequest('Este asiento ya está anulado');
+  if (entry.reversesId) badRequest('No se puede eliminar una reversión');
+
+  await prisma.$transaction(async (tx) => {
+    if (entry.sourceType === JournalSource.ORDER && entry.event === 'CLOSE') {
+      await reverseOrderClose(tx, entry.sourceId, new Date());
+      await restoreOrderSale(tx, entry.sourceId, 'CANCELACION_PEDIDO');
+      const order = await tx.order.findUnique({
+        where: { id: entry.sourceId },
+        include: { items: true },
+      });
+      if (order?.status === OrderStatus.CERRADO) {
+        await applyOrderReservation(
+          tx,
+          order.id,
+          order.items.map((item) => ({ sku: item.sku, quantity: item.quantity })),
+        );
+        await tx.order.update({ where: { id: order.id }, data: { status: OrderStatus.ENTREGADO } });
+      }
+      await postShippingCost(tx, entry.sourceId, null, new Date());
+      return;
+    }
+    await reverseEntry(tx, id, new Date());
+    if (entry.sourceType === JournalSource.EXPENSE && entry.event === 'PAY') {
+      await tx.expense.delete({ where: { id: entry.sourceId } }).catch(() => undefined);
+    }
+  });
+  return { ok: true };
 }

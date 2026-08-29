@@ -1194,6 +1194,10 @@
       "cashSale": "Contado",
       "creditSale": "Crédito"
     },
+    "closeShippingHint": "Para cerrar hay que cargar lo que se gastó en el envío. Con ese monto se genera el asiento de flete.",
+    "closeShippingRequired": "Cargá el costo de envío para cerrar el pedido",
+    "closeNeedsDelivered": "El pedido tiene que estar entregado para cerrarlo",
+    "confirmClose": "Cerrar pedido",
     "zone": {
       "asuncion": "Asunción y alrededores",
       "interior": "Interior"
@@ -1333,6 +1337,10 @@
     "saveExpense": "Guardar gasto",
     "kind": "Tipo",
     "amount": "Monto (Gs, con IVA)",
+    "amountHint": "Guaraníes enteros. Podés escribir 222000 o 222.000",
+    "ledgerHint": "Un gasto pagado desde Banco no aparece en Caja. Elegí la cuenta que se movió.",
+    "undo": "Deshacer",
+    "lastSaved": "Guardado: {{description}} · {{amount}}",
     "treasury": "Pagado desde",
     "caja": "Caja",
     "banco": "Banco",
@@ -1358,7 +1366,10 @@
       "statements": "Estados",
       "expenses": "Gastos",
       "accounts": "Plan de cuentas",
-      "manual": "Asiento libre"
+      "manual": "Asiento libre",
+      "income": "Estado de resultados",
+      "balance": "Balance general",
+      "cashflow": "Flujo de caja"
     },
     "col": {
       "number": "N.º",
@@ -1366,7 +1377,12 @@
       "memo": "Concepto",
       "origin": "Origen",
       "debit": "Debe",
-      "credit": "Haber"
+      "credit": "Haber",
+      "accountCode": "N.º cuenta",
+      "accountName": "Nombre de cuenta",
+      "concept": "Concepto",
+      "description": "Descripción",
+      "document": "Factura / comprobante"
     },
     "kinds": {
       "GENERAL": "General",
@@ -1383,10 +1399,31 @@
       "EXPENSE": "Gasto"
     },
     "toast": {
-      "expenseSaved": "Gasto registrado",
+      "expenseSaved": "Gasto registrado. Ya está en Asientos.",
       "accountSaved": "Cuenta agregada",
-      "manualSaved": "Asiento registrado",
-      "error": "No se pudo guardar"
-    }
+      "manualSaved": "Asiento registrado. Ya está en Asientos.",
+      "expenseUndone": "Gasto deshecho",
+      "error": "No se pudo guardar",
+      "entryDeleted": "Asiento anulado"
+    },
+    "incomeHint": "Ingresos, costos, gastos e IVA del período. El resultado no resta el IVA: el IVA es impuesto, no resultado.",
+    "balanceHint": "Saldos acumulados hasta la fecha Hasta. El resultado del ejercicio se suma al patrimonio.",
+    "cashHint": "Solo movimientos de Caja y Banco. Entradas = débitos de tesorería, salidas = créditos.",
+    "incomeDetail": "Ingresos",
+    "costDetail": "Costos",
+    "expenseDetail": "Gastos",
+    "taxDetail": "Impuestos (IVA del período)",
+    "ivaNet": "IVA débito − IVA crédito",
+    "currentAssets": "Activo corriente",
+    "nonCurrentAssets": "Activo no corriente",
+    "currentLiabilities": "Pasivo corriente",
+    "inflows": "Entradas",
+    "outflows": "Salidas",
+    "openingCash": "Saldo inicial de tesorería",
+    "closingCash": "Saldo final de tesorería",
+    "deleteEntry": "Eliminar",
+    "confirmDelete": "Esto anula el asiento con uno inverso. Si es el cierre de una venta, el pedido vuelve a Entregado para poder cerrarlo de nuevo.",
+    "reversed": "Anulado",
+    "cashMovements": "Movimientos de tesorería"
   }
 }

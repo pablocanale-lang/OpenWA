@@ -15,6 +15,7 @@ import {
   canCancelOrder,
   canEditCommercial,
   canEditOrderDetails,
+  assertShippingLoadedForClose,
   canEditShippingCost,
   canReturnOrder,
   initialStatusForZone,
@@ -487,7 +488,12 @@ export type PaymentInput = {
   reference?: string | null;
 };
 
-export async function transitionOrder(id: string, action: OrderAction, payment?: PaymentInput) {
+export async function transitionOrder(
+  id: string,
+  action: OrderAction,
+  payment?: PaymentInput,
+  shippingCostPyg?: number,
+) {
   const order = await prisma.order.findUnique({ where: { id }, include: orderInclude });
   if (!order) notFound('Pedido');
   const confirmed = hasConfirmedPayment(order.payments);
@@ -507,6 +513,15 @@ export async function transitionOrder(id: string, action: OrderAction, payment?:
   if (needsPayment) {
     if (!payment) badRequest('Hay que registrar el cobro');
     if (payment.amount < 1) badRequest('El monto del pago debe ser mayor a 0');
+  }
+
+  const freight = shippingCostPyg !== undefined ? shippingCostPyg : order.shippingCostPyg;
+  if (action === 'close') {
+    try {
+      assertShippingLoadedForClose(freight);
+    } catch (err) {
+      badRequest(err instanceof Error ? err.message : 'Para cerrar el pedido hay que cargar el costo de envío');
+    }
   }
 
   const next = nextStatusForAction(action);
@@ -541,6 +556,8 @@ export async function transitionOrder(id: string, action: OrderAction, payment?:
       await unwindOrder(tx, order, 'DEVOLUCION');
     }
     if (action === 'close') {
+      await tx.order.update({ where: { id }, data: { shippingCostPyg: freight } });
+      await postShippingCost(tx, id, freight, new Date());
       await releaseOrderReservation(tx, id);
       const items = presentItems(order);
       const consumed = await consumeOrderSale(tx, id, items);
@@ -550,6 +567,7 @@ export async function transitionOrder(id: string, action: OrderAction, payment?:
         gross: order.totalAmount,
         prepaid: netPaidAmount(order.payments) + (needsPayment && payment ? Math.round(payment.amount) : 0),
         settlement: order.invoiceSettlement,
+        invoiceNumber: order.invoiceNumber,
         lines: consumed,
       });
     }
@@ -611,6 +629,12 @@ export async function setOrderStatus(id: string, next: OrderStatus) {
       await applyOrderReservation(tx, id, presentItems(order));
     }
     if (current !== 'CERRADO' && target === 'CERRADO') {
+      try {
+        assertShippingLoadedForClose(order.shippingCostPyg);
+      } catch (err) {
+        badRequest(err instanceof Error ? err.message : 'Para cerrar el pedido hay que cargar el costo de envío');
+      }
+      await postShippingCost(tx, id, order.shippingCostPyg, new Date());
       await releaseOrderReservation(tx, id);
       const consumed = await consumeOrderSale(tx, id, presentItems(order));
       await postOrderClose(tx, {
@@ -619,6 +643,7 @@ export async function setOrderStatus(id: string, next: OrderStatus) {
         gross: order.totalAmount,
         prepaid: netPaidAmount(order.payments),
         settlement: order.invoiceSettlement,
+        invoiceNumber: order.invoiceNumber,
         lines: consumed,
       });
     }

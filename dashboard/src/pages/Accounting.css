@@ -22,6 +22,28 @@
   color: var(--text-muted);
 }
 
+.accounting-last-saved {
+  background: rgba(37, 211, 102, 0.12);
+  border: 1px solid rgba(37, 211, 102, 0.35);
+  border-radius: 12px;
+  padding: 0.85rem 1.1rem;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.accounting-row-new {
+  background: rgba(37, 211, 102, 0.08);
+}
+
+.accounting-page .hint {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
 .accounting-offline,
 .accounting-empty {
   background: var(--bg-white);
@@ -116,22 +138,69 @@
   gap: 0.5rem;
 }
 
-.accounting-statements {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
+.accounting-page th.num,
+.accounting-page td.num {
+  text-align: right;
+  white-space: nowrap;
 }
 
-.accounting-statements section {
+.accounting-journal td {
+  font-size: 0.875rem;
+}
+
+.accounting-entry-start td {
+  border-top: 2px solid var(--border);
+}
+
+.accounting-reversed td {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.accounting-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  text-decoration: none;
+  background: var(--bg-light);
+  color: var(--text-muted);
+}
+
+.accounting-statement h2,
+.accounting-statement h3 {
+  margin: 1.25rem 0 0.5rem;
+}
+
+.accounting-statement h2 {
+  margin-top: 0;
+}
+
+.accounting-subtotal,
+.accounting-cash-summary {
   background: var(--bg-white);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 1.25rem;
+  padding: 0.85rem 1.1rem;
+  margin: 0.75rem 0 1.25rem;
+}
+
+.accounting-cash-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem 1.5rem;
+}
+
+.accounting-total td {
+  font-weight: 700;
 }
 
 @media (max-width: 900px) {
   .accounting-form .form-grid,
-  .accounting-statements {
+  .accounting-cash-summary {
     grid-template-columns: 1fr;
   }
 }

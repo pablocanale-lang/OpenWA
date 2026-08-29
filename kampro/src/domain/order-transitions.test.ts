@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   assertOrderTransition,
+  assertShippingLoadedForClose,
   canEditShippingCost,
   initialStatusForZone,
   nextStatusForAction,
@@ -124,6 +125,15 @@ describe('assertOrderTransition', () => {
       }),
     );
     assert.equal(nextStatusForAction('returnOrder'), 'DEVUELTO');
+  });
+});
+
+describe('assertShippingLoadedForClose', () => {
+  it('exige el flete cargado para cerrar', () => {
+    assert.throws(() => assertShippingLoadedForClose(null), /costo de envío/);
+    assert.throws(() => assertShippingLoadedForClose(undefined), /costo de envío/);
+    assert.doesNotThrow(() => assertShippingLoadedForClose(0));
+    assert.doesNotThrow(() => assertShippingLoadedForClose(25000));
   });
 });
 

@@ -10,6 +10,7 @@ import { useToast } from '../hooks/useToast';
 import { useRole } from '../hooks/useRole';
 import {
   actionNeedsPayment,
+  actionNeedsShipping,
   bootstrapKamproKey,
   kamproFetch,
   type KamproOrder,
@@ -17,7 +18,7 @@ import {
   type OrderStatus,
   type PaymentMethod,
 } from '../services/kamproApi';
-import { formatPyg } from '../utils/orderPricing';
+import { formatPyg, parsePygInput } from '../utils/orderPricing';
 import './Orders.css';
 
 const STAGES: OrderStatus[] = [
@@ -226,6 +227,8 @@ export function Orders() {
   const [payAmount, setPayAmount] = useState(0);
   const [payMethod, setPayMethod] = useState<PaymentMethod>('TRANSFERENCIA');
   const [payRef, setPayRef] = useState('');
+  const [closeTarget, setCloseTarget] = useState<KamproOrder | null>(null);
+  const [closeShipping, setCloseShipping] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -254,6 +257,11 @@ export function Orders() {
     return list.filter(order => String(order.status) === stage);
   }, [ordersQ.data, stage]);
 
+  const openClose = (order: KamproOrder) => {
+    setCloseTarget(order);
+    setCloseShipping(order.shippingCostPyg != null ? String(order.shippingCostPyg) : '');
+  };
+
   const startAction = (order: KamproOrder) => {
     if (!order.primaryAction) return;
     if (actionNeedsPayment(order, order.primaryAction)) {
@@ -263,10 +271,19 @@ export function Orders() {
       setPayRef('');
       return;
     }
+    if (actionNeedsShipping(order.primaryAction)) {
+      openClose(order);
+      return;
+    }
     void runTransition(order, order.primaryAction);
   };
 
   const runTransition = async (order: KamproOrder, action: OrderAction, withPayment = false) => {
+    const shippingCostPyg = action === 'close' ? parsePygInput(closeShipping) : undefined;
+    if (action === 'close' && (shippingCostPyg == null || Number.isNaN(shippingCostPyg) || shippingCostPyg < 0)) {
+      toast.error(t('orders.toast.error'), t('orders.closeShippingRequired'));
+      return;
+    }
     setSaving(true);
     try {
       const updated = await kamproFetch<KamproOrder>(`/orders/${order.id}/transition`, {
@@ -283,6 +300,7 @@ export function Orders() {
                 },
               }
             : {}),
+          ...(action === 'close' ? { shippingCostPyg } : {}),
         }),
       });
       await queryClient.invalidateQueries({ queryKey: ['kampro'] });
@@ -301,6 +319,7 @@ export function Orders() {
         toast.success(t('orders.toast.notified'));
       }
       setPending(null);
+      setCloseTarget(null);
       setCancelTarget(null);
       setReturnTarget(null);
       setMenuId(null);
@@ -472,6 +491,14 @@ export function Orders() {
                               onOpenChange={next => setMenuId(next ? order.id : null)}
                               onMove={status => {
                                 setMenuId(null);
+                                if (status === 'CERRADO') {
+                                  if (order.status !== 'ENTREGADO') {
+                                    toast.error(t('orders.toast.error'), t('orders.closeNeedsDelivered'));
+                                    return;
+                                  }
+                                  openClose(order);
+                                  return;
+                                }
                                 void setStatus(order, status);
                               }}
                               onCancel={() => {
@@ -540,6 +567,45 @@ export function Orders() {
             <label>
               {t('orders.fields.reference')}
               <input value={payRef} onChange={e => setPayRef(e.target.value)} />
+            </label>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={Boolean(closeTarget)}
+        onClose={() => setCloseTarget(null)}
+        title={t('orders.actions.close')}
+        footer={
+          closeTarget ? (
+            <>
+              <button type="button" className="btn-secondary" onClick={() => setCloseTarget(null)}>
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={saving || closeShipping.trim() === '' || Number.isNaN(parsePygInput(closeShipping))}
+                onClick={() => void runTransition(closeTarget, 'close')}
+              >
+                {saving ? <Loader2 className="animate-spin" size={16} /> : null}
+                {t('orders.confirmClose')}
+              </button>
+            </>
+          ) : undefined
+        }
+      >
+        {closeTarget && (
+          <div className="orders-pay-form">
+            <p>{t('orders.closeShippingHint')}</p>
+            <label>
+              {t('orders.fields.shippingCost')}
+              <input
+                inputMode="numeric"
+                value={closeShipping}
+                onChange={e => setCloseShipping(e.target.value)}
+                placeholder="25000"
+              />
             </label>
           </div>
         )}

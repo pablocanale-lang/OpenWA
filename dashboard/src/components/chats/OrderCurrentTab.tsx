@@ -5,6 +5,7 @@ import { Loader2, MapPin } from 'lucide-react';
 import { messageApi, templateApi, type Chat } from '../../services/api';
 import {
   actionNeedsPayment,
+  actionNeedsShipping,
   kamproFetch,
   type KamproOrder,
   type KamproProduct,
@@ -14,7 +15,7 @@ import {
   type UpdateOrderPayload,
 } from '../../services/kamproApi';
 import { latestIncomingLocation, type LocationPin } from '../../utils/chatLocation';
-import { formatPyg, sanitizeRucInput, toDatetimeLocalValue, type OrderLineDraft } from '../../utils/orderPricing';
+import { formatPyg, parsePygInput, sanitizeRucInput, toDatetimeLocalValue, type OrderLineDraft } from '../../utils/orderPricing';
 import { useRole } from '../../hooks/useRole';
 import { useToast } from '../../hooks/useToast';
 import { Modal } from '../Modal';
@@ -103,6 +104,10 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
     order.zone === 'INTERIOR' ? 'TRANSFERENCIA' : (order.paymentMethodPreferred ?? 'EFECTIVO'),
   );
   const [payRef, setPayRef] = useState('');
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [closeShipping, setCloseShipping] = useState(
+    order.shippingCostPyg != null ? String(order.shippingCostPyg) : '',
+  );
 
   useEffect(() => {
     setForm(hydrateFromOrder(order));
@@ -116,7 +121,8 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         }
         : null,
     );
-  }, [order.id, order.updatedAt, order.status, order.totalAmount, order.locationText]);
+    setCloseShipping(order.shippingCostPyg != null ? String(order.shippingCostPyg) : '');
+  }, [order.id, order.updatedAt, order.status, order.totalAmount, order.locationText, order.shippingCostPyg]);
 
   useEffect(() => {
     if (order.zone !== 'ASUNCION' || detailsLocked) return;
@@ -158,6 +164,10 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         payload.city = form.city.trim();
         payload.carrier = form.carrier.trim();
       }
+      if (order.canEditShipping) {
+        const shipping = parsePygInput(closeShipping);
+        payload.shippingCostPyg = closeShipping.trim() === '' || !Number.isFinite(shipping) ? null : shipping;
+      }
       await kamproFetch(`/orders/${order.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
       await invalidate();
       toast.success(t('orders.toast.updated'));
@@ -169,6 +179,11 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
   };
 
   const runTransition = async (action: OrderAction, withPayment = false) => {
+    const shippingCostPyg = action === 'close' ? parsePygInput(closeShipping) : undefined;
+    if (action === 'close' && (!Number.isFinite(shippingCostPyg) || (shippingCostPyg as number) < 0)) {
+      toast.error(t('orders.toast.error'), t('orders.closeShippingRequired'));
+      return;
+    }
     setSaving(true);
     try {
       const updated = await kamproFetch<KamproOrder>(`/orders/${order.id}/transition`, {
@@ -185,6 +200,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
                 },
               }
             : {}),
+          ...(action === 'close' ? { shippingCostPyg } : {}),
         }),
       });
       await invalidate();
@@ -196,6 +212,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         toast.success(t('orders.toast.notified'));
       }
       setPayOpen(false);
+      setCloseOpen(false);
       setCancelOpen(false);
       setReturnOpen(false);
     } catch (err) {
@@ -211,6 +228,11 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
       setPayMethodConfirm(order.zone === 'INTERIOR' ? 'TRANSFERENCIA' : (order.paymentMethodPreferred ?? 'EFECTIVO'));
       setPayRef('');
       setPayOpen(true);
+      return;
+    }
+    if (actionNeedsShipping(action)) {
+      setCloseShipping(order.shippingCostPyg != null ? String(order.shippingCostPyg) : '');
+      setCloseOpen(true);
       return;
     }
     void runTransition(action);
@@ -357,6 +379,20 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         </select>
       </label>
 
+      {order.canEditShipping && (
+        <label>
+          {t('orders.fields.shippingCost')}
+          <input
+            value={closeShipping}
+            disabled={!canWrite}
+            inputMode="numeric"
+            placeholder="25000"
+            onChange={e => setCloseShipping(e.target.value)}
+          />
+          <span className="order-quick-panel__hint">{t('orders.closeShippingHint')}</span>
+        </label>
+      )}
+
       {canWrite && order.canEditDetails !== false && (
         <button type="button" className="btn-secondary" disabled={saving} onClick={() => void saveDetails()}>
           {saving ? <Loader2 className="animate-spin" size={16} /> : null}
@@ -429,6 +465,41 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
           <label>
             {t('orders.fields.reference')}
             <input value={payRef} onChange={e => setPayRef(e.target.value)} />
+          </label>
+        </div>
+      </Modal>
+
+      <Modal
+        open={closeOpen}
+        onClose={() => setCloseOpen(false)}
+        title={t('orders.actions.close')}
+        footer={
+          <>
+            <button type="button" className="btn-secondary" onClick={() => setCloseOpen(false)}>
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={saving || closeShipping.trim() === '' || Number.isNaN(parsePygInput(closeShipping))}
+              onClick={() => void runTransition('close')}
+            >
+              {saving ? <Loader2 className="animate-spin" size={16} /> : null}
+              {t('orders.confirmClose')}
+            </button>
+          </>
+        }
+      >
+        <p>{t('orders.closeShippingHint')}</p>
+        <div className="order-pay-form">
+          <label>
+            {t('orders.fields.shippingCost')}
+            <input
+              inputMode="numeric"
+              value={closeShipping}
+              onChange={e => setCloseShipping(e.target.value)}
+              placeholder="25000"
+            />
           </label>
         </div>
       </Modal>
