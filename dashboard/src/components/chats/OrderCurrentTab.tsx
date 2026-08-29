@@ -10,6 +10,7 @@ import {
   type KamproProduct,
   type OrderAction,
   type PaymentMethod,
+  type InvoiceSettlement,
   type UpdateOrderPayload,
 } from '../../services/kamproApi';
 import { latestIncomingLocation, type LocationPin } from '../../utils/chatLocation';
@@ -62,6 +63,7 @@ function hydrateFromOrder(order: KamproOrder) {
     recipientName: order.recipientName,
     invoiceName: order.invoiceName,
     ruc: order.ruc,
+    invoiceSettlement: (order.invoiceSettlement ?? 'CONTADO') as InvoiceSettlement,
     preferredTime: toDatetimeLocalValue(order.preferredTime ?? ''),
     payMethod: (order.paymentMethodPreferred ?? 'EFECTIVO') as PaymentMethod,
     locationManual: order.locationText ?? '',
@@ -134,6 +136,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         recipientName: form.recipientName.trim(),
         invoiceName: form.invoiceName.trim(),
         ruc: form.ruc.trim(),
+        invoiceSettlement: form.invoiceSettlement,
       };
       if (!commercialLocked) {
         payload.items = form.lines.map(line => ({
@@ -341,6 +344,17 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
           pattern="[0-9]+(-[0-9]+)?"
           onChange={e => setForm(prev => ({ ...prev, ruc: sanitizeRucInput(e.target.value) }))}
         />
+      </label>
+      <label>
+        {t('orders.fields.settlement')}
+        <select
+          value={form.invoiceSettlement}
+          disabled={detailsLocked}
+          onChange={e => setForm(prev => ({ ...prev, invoiceSettlement: e.target.value as InvoiceSettlement }))}
+        >
+          <option value="CONTADO">{t('orders.fields.cashSale')}</option>
+          <option value="CREDITO">{t('orders.fields.creditSale')}</option>
+        </select>
       </label>
 
       {canWrite && order.canEditDetails !== false && (

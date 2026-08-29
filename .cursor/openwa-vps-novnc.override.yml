@@ -1,0 +1,31 @@
+# Copia canónica del override en el VPS: /opt/openwa/docker-compose.override.yml
+# Kampro: Chrome con pantalla (noVNC). No publicar 6080 en 0.0.0.0.
+services:
+  novnc:
+    image: theasp/novnc:latest
+    container_name: openwa-novnc
+    restart: unless-stopped
+    environment:
+      DISPLAY_WIDTH: 1280
+      DISPLAY_HEIGHT: 800
+      RUN_XTERM: 'no'
+      RUN_FLUXBOX: 'yes'
+    ports:
+      - '127.0.0.1:6080:8080'
+    networks:
+      - openwa-network
+    mem_limit: 256m
+    security_opt:
+      - 'no-new-privileges:true'
+
+  openwa-api:
+    environment:
+      - DISPLAY=novnc:0.0
+      - PUPPETEER_HEADLESS=false
+      - HOME=/home/openwa
+    tmpfs:
+      - /tmp
+      - /home/openwa:uid=997,gid=997,mode=700
+    depends_on:
+      novnc:
+        condition: service_started

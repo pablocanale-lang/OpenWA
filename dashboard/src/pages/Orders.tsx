@@ -445,6 +445,9 @@ export function Orders() {
                         ) : (
                           '—'
                         )}
+                        <div className="orders-settlement">
+                          {t(`orders.fields.${order.invoiceSettlement === 'CREDITO' ? 'creditSale' : 'cashSale'}`)}
+                        </div>
                       </td>
                       <td>
                         <span className="order-stage">{t(`orders.status.${order.status}`)}</span>

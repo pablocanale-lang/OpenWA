@@ -173,6 +173,12 @@
   background: var(--bg-white);
 }
 
+.orders-settlement {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
 .orders-invoice {
   font-variant-numeric: tabular-nums;
   font-size: 0.75rem;

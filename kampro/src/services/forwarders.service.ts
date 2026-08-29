@@ -3,7 +3,7 @@ import { notFound } from '../http-error.js';
 
 export async function listForwarders() {
   return prisma.forwarder.findMany({
-    include: { _count: { select: { shipments: true } } },
+    include: { _count: { select: { shipments: true, purchaseOrders: true } } },
     orderBy: { name: 'asc' },
   });
 }

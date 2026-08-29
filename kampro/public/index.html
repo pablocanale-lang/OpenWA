@@ -19,7 +19,7 @@
         <span class="brand-mark">K</span>
         <div>
           <p class="brand-name">Kampro CRM</p>
-          <p class="brand-sub">Importación y abastecimiento · capa sobre OpenWA</p>
+          <p class="brand-sub">Órdenes de compra · capa sobre OpenWA</p>
         </div>
       </div>
       <div class="top-actions">
@@ -32,152 +32,200 @@
       </div>
     </header>
 
+    <div id="kpis" class="kpi" style="padding: 1rem 1.5rem 0"></div>
+
     <nav class="tabs" role="tablist">
-      <button type="button" class="tab active" data-tab="products">Productos</button>
+      <button type="button" class="tab active" data-tab="orders">Órdenes de compra</button>
       <button type="button" class="tab" data-tab="suppliers">Proveedores</button>
-      <button type="button" class="tab" data-tab="purchases">Compras</button>
-      <button type="button" class="tab" data-tab="shipments">Envíos</button>
-      <button type="button" class="tab" data-tab="costs">Costos</button>
-      <button type="button" class="tab" data-tab="receptions">Recepción</button>
-      <button type="button" class="tab" data-tab="report">Costo SKU</button>
+      <button type="button" class="tab" data-tab="forwarders">Forwarders</button>
+      <button type="button" class="tab" data-tab="receptions">Recepciones</button>
+      <button type="button" class="tab" data-tab="invoices">Facturas</button>
     </nav>
 
     <main>
-      <section id="panel-products" class="panel active">
+      <section id="panel-orders" class="panel active">
         <div class="panel-head">
-          <h1>Productos / SKU</h1>
-          <p>Stock disponible. El ingreso a stock ocurre al registrar una recepción. No hay reposición automática (TODO de negocio).</p>
+          <h1>Órdenes de compra</h1>
+          <p>Borrador hasta cargar el comprobante. Al cerrar se detalla recepción, aduana, despacho y facturas; eso entra al inventario.</p>
         </div>
-        <div id="productsTable" class="table-wrap"></div>
+        <form id="formOrder" class="form-grid">
+          <label>Forwarder <select name="forwarderId" required></select></label>
+          <label>Fecha de pedido <input name="orderedAt" type="date" required /></label>
+          <label>Proveedor <select name="supplierId" required></select></label>
+          <label>Ubicación origen <input name="origin" required /></label>
+          <label>Destino <input name="destination" required /></label>
+          <label>Moneda
+            <select name="currency" id="orderCurrency">
+              <option value="PYG">Guaraníes (PYG)</option>
+              <option value="USD" selected>Dólares (USD)</option>
+              <option value="JPY">Yen</option>
+            </select>
+          </label>
+          <label id="orderFxWrap">Tipo de cambio (→ Gs) <input name="fxRateToPyg" placeholder="7500" /></label>
+          <label>Flete <input name="freight" value="0" /></label>
+          <label>Otros cargos <input name="otherCharges" value="0" /></label>
+          <div class="full">
+            <div class="po-lines-head"><strong>Productos</strong> <button type="button" class="btn ghost" id="btnAddOrderLine">Agregar producto</button></div>
+            <div class="table-wrap"><table class="data"><thead><tr><th>Producto</th><th>Cantidad</th><th>Precio</th><th></th></tr></thead><tbody id="orderLines"></tbody></table></div>
+          </div>
+          <label class="full">Comentarios <textarea name="comments" rows="2"></textarea></label>
+          <div class="full actions"><button class="btn primary" type="submit">Guardar borrador</button></div>
+        </form>
+        <div id="ordersTable" class="table-wrap"></div>
       </section>
 
       <section id="panel-suppliers" class="panel">
         <div class="panel-head">
           <h1>Proveedores</h1>
-          <p>Proveedor chino (Alibaba): nombre, contacto, país y perfil.</p>
+          <p>Listado de control. Se usan en las órdenes de compra.</p>
         </div>
         <form id="formSupplier" class="form-grid">
           <label>Nombre <input name="name" required /></label>
           <label>Contacto <input name="contact" /></label>
           <label>País <input name="country" value="CN" /></label>
           <label>Alibaba URL <input name="alibabaUrl" placeholder="https://..." /></label>
-          <label class="full">Notas <input name="notes" /></label>
           <div class="full actions"><button class="btn primary" type="submit">Crear proveedor</button></div>
         </form>
         <div id="suppliersTable" class="table-wrap"></div>
       </section>
 
-      <section id="panel-purchases" class="panel">
+      <section id="panel-forwarders" class="panel">
         <div class="panel-head">
-          <h1>Compras</h1>
-          <p>Compra a proveedor: fecha, SKU, cantidad, precio, moneda. El total se calcula solo.</p>
-        </div>
-        <form id="formPurchase" class="form-grid">
-          <label>Fecha <input name="purchasedAt" type="date" required /></label>
-          <label>Proveedor <select name="supplierId" required></select></label>
-          <label>SKU <select name="productId" required></select></label>
-          <label>Cantidad <input name="quantity" type="number" min="1" required /></label>
-          <label>Precio unitario <input name="unitPrice" required placeholder="2.40" /></label>
-          <label>Moneda <input name="currency" value="USD" /></label>
-          <label>FX a PYG (opcional) <input name="fxRateToPyg" placeholder="7500" /></label>
-          <label>Envío (opcional) <select name="shipmentId"><option value="">— sin asignar —</option></select></label>
-          <div class="full actions"><button class="btn primary" type="submit">Registrar compra</button></div>
-        </form>
-        <div id="purchasesTable" class="table-wrap"></div>
-      </section>
-
-      <section id="panel-shipments" class="panel">
-        <div class="panel-head">
-          <h1>Forwarder / Envío</h1>
-          <p>Coordinación logística a Paraguay: referencia, salida, ETA y llegada real.</p>
+          <h1>Forwarders</h1>
+          <p>Listado de control para logística.</p>
         </div>
         <form id="formForwarder" class="form-grid">
-          <label>Nombre forwarder <input name="name" required /></label>
+          <label>Nombre <input name="name" required /></label>
           <label>Contacto <input name="contact" /></label>
           <label>País <input name="country" /></label>
           <div class="full actions"><button class="btn primary" type="submit">Crear forwarder</button></div>
         </form>
-        <form id="formShipment" class="form-grid">
-          <label>Forwarder <select name="forwarderId" required></select></label>
-          <label>Referencia <input name="reference" required placeholder="BL / tracking" /></label>
-          <label>Salida <input name="departedAt" type="date" /></label>
-          <label>ETA <input name="etaAt" type="date" /></label>
-          <label>Llegada real <input name="arrivedAt" type="date" /></label>
-          <label>Asignar compra <select name="purchaseId"><option value="">— ninguna —</option></select></label>
-          <div class="full actions"><button class="btn primary" type="submit">Registrar envío</button></div>
-        </form>
-        <div id="shipmentsTable" class="table-wrap"></div>
-      </section>
-
-      <section id="panel-costs" class="panel">
-        <div class="panel-head">
-          <h1>Costos de importación</h1>
-          <p>Logística, aduana, impuestos u otros. Sin compra asociada se prorratea por cantidad entre las compras del envío.</p>
-        </div>
-        <form id="formCost" class="form-grid">
-          <label>Envío <select name="shipmentId" required></select></label>
-          <label>Compra (opcional) <select name="purchaseId"><option value="">— prorratear en el envío —</option></select></label>
-          <label>
-            Tipo
-            <select name="type">
-              <option value="LOGISTICA">LOGISTICA</option>
-              <option value="ADUANA">ADUANA</option>
-              <option value="IMPUESTO">IMPUESTO</option>
-              <option value="OTRO">OTRO</option>
-            </select>
-          </label>
-          <label>Monto <input name="amount" required /></label>
-          <label>Moneda <input name="currency" value="USD" /></label>
-          <label>FX a PYG (opcional) <input name="fxRateToPyg" /></label>
-          <label class="full">Descripción <input name="description" /></label>
-          <div class="full actions"><button class="btn primary" type="submit">Cargar costo</button></div>
-        </form>
-        <div id="costsTable" class="table-wrap"></div>
+        <div id="forwardersTable" class="table-wrap"></div>
       </section>
 
       <section id="panel-receptions" class="panel">
         <div class="panel-head">
-          <h1>Recepción</h1>
-          <p>Cantidad recibida entra a stock. Unidades DANADO no ingresan. Si hay diferencia vs lo comprado y no cargás incidencia, se genera sola.</p>
+          <h1>Recepciones</h1>
+          <p>Órdenes cerradas. Cada cierre suma las unidades al inventario.</p>
         </div>
-        <form id="formReception" class="form-grid">
-          <label>Envío <select name="shipmentId" required></select></label>
-          <label>Compra <select name="purchaseId" required></select></label>
-          <label>Cantidad recibida <input name="receivedQty" type="number" min="0" required /></label>
-          <label>Fecha <input name="receivedAt" type="date" required /></label>
-          <label>
-            Incidencia
-            <select name="incidentType">
-              <option value="">— ninguna —</option>
-              <option value="FALTANTE">FALTANTE</option>
-              <option value="SOBRANTE">SOBRANTE</option>
-              <option value="DANADO">DANADO</option>
-              <option value="OTRO">OTRO</option>
-            </select>
-          </label>
-          <label>Cant. incidencia <input name="incidentQty" type="number" min="1" /></label>
-          <label class="full">Notas <input name="notes" /></label>
-          <div class="full actions"><button class="btn primary" type="submit">Registrar recepción</button></div>
-        </form>
         <div id="receptionsTable" class="table-wrap"></div>
       </section>
 
-      <section id="panel-report" class="panel">
-        <div class="panel-head row">
-          <div>
-            <h1>Costo real por SKU</h1>
-            <p>Historial de compras + costos de importación prorrateados. El margen se calcula después, cuando exista precio de venta.</p>
-          </div>
-          <div class="filters">
-            <select id="reportSku"></select>
-            <button type="button" id="btnReport" class="btn primary">Ver historial</button>
-          </div>
+      <section id="panel-invoices" class="panel">
+        <div class="panel-head">
+          <h1>Facturas</h1>
+          <p>Número, RUC, razón social, fecha y monto cargados al cerrar la orden.</p>
         </div>
-        <div id="reportKpis" class="kpi"></div>
-        <p id="reportNote" class="todo" hidden></p>
-        <div id="reportTable" class="table-wrap"></div>
+        <div id="invoicesTable" class="table-wrap"></div>
       </section>
     </main>
+
+    <dialog id="dlgConfirm">
+      <form method="dialog" class="form-grid" style="margin: 0; max-width: none">
+        <h2 class="full" style="margin: 0">Confirmar orden</h2>
+        <p class="full muted">Para confirmar hay que cargar el comprobante de pago.</p>
+        <input type="hidden" name="id" />
+        <label class="full">Comprobante de pago <input name="paymentReceipt" required /></label>
+        <label>Sale de
+          <select name="treasury">
+            <option value="BANCO">Banco</option>
+            <option value="CAJA">Caja</option>
+          </select>
+        </label>
+        <div class="full actions">
+          <button class="btn ghost" type="button" id="btnCancelConfirm">Cancelar</button>
+          <button class="btn primary" id="btnConfirm" type="button">Confirmar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="dlgClose">
+      <form method="dialog" class="form-grid" style="margin: 0; max-width: none">
+        <h2 class="full" style="margin: 0">Cerrar orden</h2>
+        <p class="full muted">Recepción, aduana, despacho y al menos una factura. Impacta inventario.</p>
+        <input type="hidden" name="id" />
+        <label>Fecha de recepción <input name="receivedAt" type="date" required /></label>
+        <label>Costo aduana <input name="customsCost" required /></label>
+        <label>Costo despacho <input name="dispatchCost" required /></label>
+        <label>Pago local sale de
+          <select name="localTreasury">
+            <option value="BANCO">Banco</option>
+            <option value="CAJA">Caja</option>
+          </select>
+        </label>
+        <div class="full" id="closeInvoices"></div>
+        <div class="full"><button class="btn ghost" type="button" id="btnAddCloseInvoice">Agregar factura</button></div>
+        <div class="full actions">
+          <button class="btn ghost" type="button" id="btnCancelClose">Volver</button>
+          <button class="btn primary" id="btnClose" type="button">Cerrar orden</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="dlgEdit">
+      <form method="dialog" class="form-grid" style="margin: 0; max-width: none">
+        <h2 class="full" style="margin: 0">Editar orden</h2>
+        <p class="full muted">Se puede editar en cualquier estado, salvo cancelada.</p>
+        <input type="hidden" name="id" />
+        <label>Forwarder <select name="forwarderId" required></select></label>
+        <label>Fecha de pedido <input name="orderedAt" type="date" required /></label>
+        <label>Proveedor <select name="supplierId" required></select></label>
+        <label>Ubicación origen <input name="origin" required /></label>
+        <label>Destino <input name="destination" required /></label>
+        <label>Moneda
+          <select name="currency" id="editCurrency">
+            <option value="PYG">Guaraníes (PYG)</option>
+            <option value="USD">Dólares (USD)</option>
+            <option value="JPY">Yen</option>
+          </select>
+        </label>
+        <label id="editFxWrap">Tipo de cambio (→ Gs) <input name="fxRateToPyg" placeholder="7500" /></label>
+        <label>Flete <input name="freight" /></label>
+        <label>Otros cargos <input name="otherCharges" /></label>
+        <div class="full">
+          <div class="po-lines-head"><strong>Productos</strong> <button type="button" class="btn ghost" id="btnAddEditLine">Agregar producto</button></div>
+          <div class="table-wrap"><table class="data"><thead><tr><th>Producto</th><th>Cantidad</th><th>Precio</th><th></th></tr></thead><tbody id="editLines"></tbody></table></div>
+        </div>
+        <label class="full">Comentarios <textarea name="comments" rows="2"></textarea></label>
+        <div class="full actions">
+          <button class="btn ghost" type="button" id="btnCancelEdit">Volver</button>
+          <button class="btn primary" id="btnSaveEdit" type="button">Guardar cambios</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="dlgCancel">
+      <form method="dialog" class="form-grid" style="margin: 0; max-width: none">
+        <h2 class="full" style="margin: 0">Cancelar orden</h2>
+        <p class="full muted" id="cancelHint">La orden queda cancelada y deja de contar como compra.</p>
+        <input type="hidden" name="id" />
+        <div id="cancelRefundFields" class="full form-grid" hidden>
+          <label>Monto devuelto (Gs) <input name="amountPyg" inputmode="numeric" /></label>
+          <label>Entra a
+            <select name="treasury">
+              <option value="BANCO">Banco</option>
+              <option value="CAJA">Caja</option>
+            </select>
+          </label>
+          <label>Fecha <input name="paidAt" type="date" /></label>
+          <label>Referencia <input name="reference" /></label>
+        </div>
+        <div class="full actions">
+          <button class="btn ghost" type="button" id="btnCancelCancel">Volver</button>
+          <button class="btn danger" id="btnDoCancel" type="button">Cancelar orden</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="dlgDetail">
+      <form method="dialog" class="form-grid" style="margin: 0; max-width: none">
+        <h2 class="full" style="margin: 0">Detalle de la orden</h2>
+        <div class="full muted" id="detailBody"></div>
+        <div class="full actions">
+          <button class="btn ghost" type="button" id="btnCloseDetail">Cerrar</button>
+        </div>
+      </form>
+    </dialog>
 
     <script type="module" src="/ui/app.js"></script>
   </body>

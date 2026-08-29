@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Eye, EyeOff, Languages } from 'lucide-react';
-import { GithubIcon } from '../components/GithubIcon';
 import { CustomSelect } from '../components/CustomSelect';
 import { languageOptions, resolveSupportedLanguage, type SupportedLanguage } from '../i18n';
 import { API_BASE_URL } from '../services/api';
@@ -61,15 +60,7 @@ export function Login({ onLogin }: LoginProps) {
     <div className="login-container">
       <div className="login-card">
         <div className="login-logo">
-          <img src="/openwa_logo.webp" alt="OpenWA" className="logo-icon" />
-          <span className="version-info">
-            {t('login.version', {
-              version: __APP_VERSION__,
-              // ISO date (YYYYMMDD) so the format is stable across locales/regions instead of the
-              // locale-dependent toLocaleDateString() which renders differently per browser region.
-              date: new Date(__BUILD_TIME__).toISOString().slice(0, 10).replace(/-/g, ''),
-            })}
-          </span>
+          <img src="/kampro-logo.png?v=3" alt="Kampro" className="logo-icon" />
         </div>
 
         <div className="login-language">
@@ -121,15 +112,6 @@ export function Login({ onLogin }: LoginProps) {
 
       <footer className="login-footer">
         <span>{t('login.footer')}</span>
-        <a
-          href="https://github.com/rmyndharis/OpenWA"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="github-link"
-          aria-label="GitHub"
-        >
-          <GithubIcon size={18} />
-        </a>
       </footer>
     </div>
   );

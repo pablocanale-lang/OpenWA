@@ -213,6 +213,8 @@ export function Inventory() {
                     <th>{t('inventory.fields.name')}</th>
                     <th>{t('inventory.fields.capacity')}</th>
                     <th>{t('inventory.fields.stock')}</th>
+                    <th>{t('inventory.fields.reserved')}</th>
+                    <th>{t('inventory.fields.available')}</th>
                     <th>{t('inventory.fields.price')}</th>
                     <th>{t('inventory.fields.status')}</th>
                     {canWrite ? <th>{t('inventory.fields.actions')}</th> : null}
@@ -240,6 +242,10 @@ export function Inventory() {
                               </button>
                             </span>
                           )}
+                        </td>
+                        <td>{product.reservedQty ?? 0}</td>
+                        <td>
+                          <strong>{product.availableQty ?? product.stockQty - (product.reservedQty ?? 0)}</strong>
                         </td>
                         <td>
                           {canWrite ? (

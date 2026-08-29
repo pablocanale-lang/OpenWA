@@ -1,4 +1,6 @@
 import {
+  InvoiceSettlement,
+  JournalSource,
   OrderStatus,
   OrderZone,
   PaymentMethod,
@@ -25,8 +27,16 @@ import {
 } from '../domain/order-transitions.js';
 import { resolveOrderLines, summarizeLines, type OrderLineInput } from './order-lines.js';
 import { notifySalesGroup, type SalesNotifyResult } from './openwa.service.js';
-import { applyOrderStock, restoreOrderStock } from './stock.service.js';
+import { applyOrderReservation, consumeOrderSale, releaseOrderReservation, restoreOrderSale } from './stock.service.js';
 import { allocateInvoice } from './invoice.service.js';
+import { reverseActive } from './journal.service.js';
+import {
+  postOrderClose,
+  postOrderPayment,
+  postOrderRefund,
+  postShippingCost,
+  reverseOrderClose,
+} from './accounting.service.js';
 
 const orderInclude = {
   payments: { orderBy: { paidAt: 'desc' as const } },
@@ -62,9 +72,9 @@ async function refundConfirmedPayments(
   payments: Array<{ status: PaymentStatus; amount: number; method: PaymentMethod }>,
 ) {
   const net = netPaidAmount(payments);
-  if (net < 1) return;
+  if (net < 1) return null;
   const last = payments.find((p) => p.status === PaymentStatus.CONFIRMADO);
-  await tx.payment.create({
+  return tx.payment.create({
     data: {
       orderId,
       amount: Math.round(net),
@@ -74,6 +84,37 @@ async function refundConfirmedPayments(
       reference: 'Reembolso',
     },
   });
+}
+
+async function unwindOrder(
+  tx: Prisma.TransactionClient,
+  order: OrderRow,
+  reason: 'CANCELACION_PEDIDO' | 'DEVOLUCION',
+) {
+  const wasClosed = order.status === OrderStatus.CERRADO;
+  if (wasClosed) {
+    await reverseOrderClose(tx, order.id, new Date());
+    await restoreOrderSale(tx, order.id, reason);
+    await postShippingCost(tx, order.id, null, new Date());
+  } else {
+    await releaseOrderReservation(tx, order.id);
+  }
+  const confirmed = order.payments.filter((p) => p.status === PaymentStatus.CONFIRMADO);
+  let reversedPay = false;
+  for (const payment of confirmed) {
+    const reversed = await reverseActive(tx, JournalSource.PAYMENT, payment.id, 'PAY', new Date());
+    if (reversed) reversedPay = true;
+  }
+  const refund = await refundConfirmedPayments(tx, order.id, order.payments);
+  if (refund && !reversedPay) {
+    await postOrderRefund(tx, {
+      orderId: order.id,
+      paymentId: refund.id,
+      amount: refund.amount,
+      method: refund.method,
+      paidAt: refund.paidAt,
+    });
+  }
 }
 
 function shouldIssueInvoice(zone: OrderZone, action: OrderAction, invoiceNumber: string | null): boolean {
@@ -173,6 +214,7 @@ export type CreateOrderInput = {
   recipientName: string;
   invoiceName: string;
   ruc: string;
+  invoiceSettlement?: InvoiceSettlement;
   sessionId?: string;
   chatId?: string;
   locationLat?: number | null;
@@ -214,6 +256,7 @@ export async function createOrder(input: CreateOrderInput) {
         recipientName: input.recipientName.trim(),
         invoiceName: input.invoiceName.trim(),
         ruc,
+        invoiceSettlement: input.invoiceSettlement ?? InvoiceSettlement.CONTADO,
         status: initialStatusForZone(asZone(input.zone)),
         sessionId: input.sessionId || null,
         chatId: input.chatId || null,
@@ -238,7 +281,7 @@ export async function createOrder(input: CreateOrderInput) {
       },
       include: orderInclude,
     });
-    await applyOrderStock(tx, order.id, lines);
+    await applyOrderReservation(tx, order.id, lines);
     return order;
   });
 
@@ -267,6 +310,7 @@ export type UpdateOrderInput = {
   recipientName?: string;
   invoiceName?: string;
   ruc?: string;
+  invoiceSettlement?: InvoiceSettlement;
   locationLat?: number | null;
   locationLng?: number | null;
   locationText?: string | null;
@@ -289,10 +333,14 @@ export async function updateShippingCost(id: string, shippingCostPyg: number | n
   }
   const next =
     shippingCostPyg == null ? null : Math.max(0, Math.round(shippingCostPyg));
-  const updated = await prisma.order.update({
-    where: { id },
-    data: { shippingCostPyg: next },
-    include: orderInclude,
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.order.update({
+      where: { id },
+      data: { shippingCostPyg: next },
+      include: orderInclude,
+    });
+    await postShippingCost(tx, id, next, new Date());
+    return row;
   });
   return present(updated);
 }
@@ -376,10 +424,12 @@ export async function updateOrder(id: string, input: UpdateOrderInput) {
           sortOrder: line.sortOrder,
         })),
       });
-      await applyOrderStock(tx, id, lines);
+      if (asStatus(order.status) !== 'CERRADO') {
+        await applyOrderReservation(tx, id, lines);
+      }
     }
 
-    return tx.order.update({
+    const updatedOrder = await tx.order.update({
       where: { id },
       data: {
         sku: summary?.sku,
@@ -392,6 +442,7 @@ export async function updateOrder(id: string, input: UpdateOrderInput) {
         recipientName,
         invoiceName,
         ruc,
+        invoiceSettlement: input.invoiceSettlement,
         locationLat:
           nextZone === OrderZone.ASUNCION
             ? input.locationLat !== undefined
@@ -418,6 +469,12 @@ export async function updateOrder(id: string, input: UpdateOrderInput) {
       },
       include: orderInclude,
     });
+    if (input.shippingCostPyg !== undefined) {
+      const next =
+        input.shippingCostPyg == null ? null : Math.max(0, Math.round(input.shippingCostPyg));
+      await postShippingCost(tx, id, next, new Date());
+    }
+    return updatedOrder;
   });
 
   return present(updated);
@@ -431,7 +488,8 @@ export type PaymentInput = {
 };
 
 export async function transitionOrder(id: string, action: OrderAction, payment?: PaymentInput) {
-  const order = await getOrder(id);
+  const order = await prisma.order.findUnique({ where: { id }, include: orderInclude });
+  if (!order) notFound('Pedido');
   const confirmed = hasConfirmedPayment(order.payments);
 
   try {
@@ -455,7 +513,7 @@ export async function transitionOrder(id: string, action: OrderAction, payment?:
 
   const updated = await prisma.$transaction(async (tx) => {
     if (needsPayment && payment) {
-      await tx.payment.create({
+      const createdPay = await tx.payment.create({
         data: {
           orderId: id,
           amount: Math.round(payment.amount),
@@ -465,15 +523,35 @@ export async function transitionOrder(id: string, action: OrderAction, payment?:
           reference: payment.reference?.trim() || null,
         },
       });
+      await postOrderPayment(tx, {
+        orderId: id,
+        paymentId: createdPay.id,
+        amount: createdPay.amount,
+        method: createdPay.method,
+        paidAt: createdPay.paidAt,
+        orderClosed: order.status === OrderStatus.CERRADO || next === 'CERRADO',
+        settlement: order.invoiceSettlement,
+      });
     }
 
     if (action === 'cancel') {
-      await restoreOrderStock(tx, id, 'CANCELACION_PEDIDO');
-      if (confirmed) await refundConfirmedPayments(tx, id, order.payments);
+      await unwindOrder(tx, order, 'CANCELACION_PEDIDO');
     }
     if (action === 'returnOrder') {
-      await restoreOrderStock(tx, id, 'DEVOLUCION');
-      if (confirmed) await refundConfirmedPayments(tx, id, order.payments);
+      await unwindOrder(tx, order, 'DEVOLUCION');
+    }
+    if (action === 'close') {
+      await releaseOrderReservation(tx, id);
+      const items = presentItems(order);
+      const consumed = await consumeOrderSale(tx, id, items);
+      await postOrderClose(tx, {
+        orderId: id,
+        datedAt: new Date(),
+        gross: order.totalAmount,
+        prepaid: netPaidAmount(order.payments) + (needsPayment && payment ? Math.round(payment.amount) : 0),
+        settlement: order.invoiceSettlement,
+        lines: consumed,
+      });
     }
 
     const invoice = shouldIssueInvoice(order.zone, action, order.invoiceNumber)
@@ -527,11 +605,27 @@ export async function setOrderStatus(id: string, next: OrderStatus) {
   const confirmed = hasConfirmedPayment(order.payments);
   const updated = await prisma.$transaction(async (tx) => {
     if (!isTerminalOrder(current) && isTerminalOrder(target)) {
-      await restoreOrderStock(tx, id, target === 'DEVUELTO' ? 'DEVOLUCION' : 'CANCELACION_PEDIDO');
-      if (confirmed) await refundConfirmedPayments(tx, id, order.payments);
+      await unwindOrder(tx, order, target === 'DEVUELTO' ? 'DEVOLUCION' : 'CANCELACION_PEDIDO');
     }
     if (isTerminalOrder(current) && !isTerminalOrder(target)) {
-      await applyOrderStock(tx, id, presentItems(order));
+      await applyOrderReservation(tx, id, presentItems(order));
+    }
+    if (current !== 'CERRADO' && target === 'CERRADO') {
+      await releaseOrderReservation(tx, id);
+      const consumed = await consumeOrderSale(tx, id, presentItems(order));
+      await postOrderClose(tx, {
+        orderId: id,
+        datedAt: new Date(),
+        gross: order.totalAmount,
+        prepaid: netPaidAmount(order.payments),
+        settlement: order.invoiceSettlement,
+        lines: consumed,
+      });
+    }
+    if (current === 'CERRADO' && target !== 'CERRADO' && !isTerminalOrder(target)) {
+      await reverseOrderClose(tx, id, new Date());
+      await restoreOrderSale(tx, id, 'CANCELACION_PEDIDO');
+      await applyOrderReservation(tx, id, presentItems(order));
     }
     const invoice = shouldIssueInvoiceForStatus(order.zone, target, order.invoiceNumber, confirmed)
       ? await allocateInvoice(tx)

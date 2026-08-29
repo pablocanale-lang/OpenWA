@@ -118,7 +118,7 @@ export function OrderProductLines({ products, lines, disabled, onChange }: Props
             <strong>
               {product.unitPricePyg != null ? formatPyg(product.unitPricePyg) : t('orders.noCatalogPriceShort')}
               {' · '}
-              {t('orders.stockShort', { count: product.stockQty })}
+              {t('orders.stockShort', { count: product.availableQty ?? product.stockQty })}
             </strong>
           </button>
         ))}
@@ -192,8 +192,8 @@ export function OrderProductLines({ products, lines, disabled, onChange }: Props
                 <p className="order-quick-panel__quote">{formatPyg(lineTotalPyg(line))}</p>
                 {line.quantity !== 2 && <p className="order-quick-panel__hint">{t('orders.discountHint')}</p>}
                 {missingPrice && <p className="order-quick-panel__hint">{t('orders.noCatalogPrice')}</p>}
-                {product && line.quantity > product.stockQty && (
-                  <p className="order-quick-panel__hint">{t('orders.stockShortfall', { have: product.stockQty })}</p>
+                {product && line.quantity > (product.availableQty ?? product.stockQty) && (
+                  <p className="order-quick-panel__hint">{t('orders.stockShortfall', { have: product.availableQty ?? product.stockQty })}</p>
                 )}
               </div>
             );

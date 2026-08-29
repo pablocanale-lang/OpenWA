@@ -1,65 +1,122 @@
 import { Prisma, StockMovementReason } from '@prisma/client';
+import { prisma } from '../db.js';
 import { badRequest } from '../http-error.js';
-import { netByProduct, qtyNeededBySku, saleDelta } from '../domain/stock.js';
+import { availableQty, netByProduct, qtyNeededBySku, reservationDelta } from '../domain/stock.js';
 
 type Tx = Prisma.TransactionClient;
 
-export async function applyOrderStock(
+async function productsBySku(tx: Tx, skus: string[]) {
+  const map = new Map<string, { id: string; sku: string; stockQty: number; reservedQty: number }>();
+  for (const sku of skus) {
+    const product = await tx.product.findUnique({ where: { sku } });
+    if (!product) badRequest(`SKU desconocido: ${sku}`);
+    map.set(sku, product);
+  }
+  return map;
+}
+
+function reservationNet(movements: Array<{ productId: string; quantity: number; reason: StockMovementReason }>) {
+  return netByProduct(movements.filter((m) => m.reason === StockMovementReason.RESERVA));
+}
+
+export async function applyOrderReservation(
   tx: Tx,
   orderId: string,
   lines: Array<{ sku: string; quantity: number }>,
 ): Promise<void> {
   const needed = qtyNeededBySku(lines);
   const movements = await tx.stockMovement.findMany({ where: { orderId } });
-  const currentNet = netByProduct(movements);
+  const currentReserved = reservationNet(movements);
+  const skuToProduct = await productsBySku(tx, [...needed.keys()]);
 
-  const skuToProduct = new Map<string, { id: string; sku: string; stockQty: number }>();
-  for (const sku of needed.keys()) {
-    const product = await tx.product.findUnique({ where: { sku } });
-    if (!product) badRequest(`SKU desconocido: ${sku}`);
-    skuToProduct.set(sku, product);
-  }
+  const want = new Map<string, number>();
+  for (const [sku, qty] of needed) want.set(skuToProduct.get(sku)!.id, qty);
 
-  const wantNet = new Map<string, number>();
-  for (const [sku, qty] of needed) {
-    wantNet.set(skuToProduct.get(sku)!.id, -qty);
-  }
-
-  const productIds = new Set([...currentNet.keys(), ...wantNet.keys()]);
+  const productIds = new Set([...currentReserved.keys(), ...want.keys()]);
   for (const productId of productIds) {
-    const delta = saleDelta(currentNet.get(productId) ?? 0, wantNet.has(productId) ? -(wantNet.get(productId) ?? 0) : 0);
+    const delta = reservationDelta(currentReserved.get(productId) ?? 0, want.get(productId) ?? 0);
     if (delta === 0) continue;
-
     const product = await tx.product.findUnique({ where: { id: productId } });
     if (!product) badRequest('Producto de inventario no encontrado');
-    if (product.stockQty + delta < 0) {
-      badRequest(`Stock insuficiente para ${product.sku}: hay ${product.stockQty}`);
+    const nextReserved = product.reservedQty + delta;
+    if (nextReserved < 0) badRequest(`La reserva de ${product.sku} no puede ser negativa`);
+    if (availableQty(product.stockQty, product.reservedQty) - delta < 0 && delta > 0) {
+      badRequest(`Stock insuficiente para ${product.sku}: hay ${availableQty(product.stockQty, product.reservedQty)} disponible`);
     }
-
     await tx.product.update({
       where: { id: productId },
-      data: { stockQty: { increment: delta } },
+      data: { reservedQty: { increment: delta } },
     });
     await tx.stockMovement.create({
       data: {
         productId,
         quantity: delta,
-        reason: StockMovementReason.VENTA,
+        reason: StockMovementReason.RESERVA,
         orderId,
       },
     });
   }
 }
 
-export async function restoreOrderStock(
+export async function releaseOrderReservation(tx: Tx, orderId: string): Promise<void> {
+  const movements = await tx.stockMovement.findMany({ where: { orderId } });
+  const reserved = reservationNet(movements);
+  for (const [productId, qty] of reserved) {
+    if (qty <= 0) continue;
+    await tx.product.update({
+      where: { id: productId },
+      data: { reservedQty: { decrement: qty } },
+    });
+    await tx.stockMovement.create({
+      data: {
+        productId,
+        quantity: -qty,
+        reason: StockMovementReason.RESERVA,
+        orderId,
+        notes: 'Libera reserva',
+      },
+    });
+  }
+}
+
+export async function consumeOrderSale(
+  tx: Tx,
+  orderId: string,
+  lines: Array<{ sku: string; quantity: number }>,
+): Promise<Array<{ productId: string; sku: string; quantity: number }>> {
+  const needed = qtyNeededBySku(lines);
+  const skuToProduct = await productsBySku(tx, [...needed.keys()]);
+  const consumed: Array<{ productId: string; sku: string; quantity: number }> = [];
+  for (const [sku, qty] of needed) {
+    const product = skuToProduct.get(sku)!;
+    if (product.stockQty < qty) {
+      badRequest(`Stock insuficiente para ${sku}: hay ${product.stockQty}`);
+    }
+    await tx.product.update({
+      where: { id: product.id },
+      data: { stockQty: { decrement: qty } },
+    });
+    await tx.stockMovement.create({
+      data: {
+        productId: product.id,
+        quantity: -qty,
+        reason: StockMovementReason.VENTA,
+        orderId,
+      },
+    });
+    consumed.push({ productId: product.id, sku, quantity: qty });
+  }
+  return consumed;
+}
+
+export async function restoreOrderSale(
   tx: Tx,
   orderId: string,
   reason: 'CANCELACION_PEDIDO' | 'DEVOLUCION',
 ): Promise<void> {
   const movements = await tx.stockMovement.findMany({ where: { orderId } });
-  const currentNet = netByProduct(movements);
-
-  for (const [productId, net] of currentNet) {
+  const sold = netByProduct(movements.filter((m) => m.reason === StockMovementReason.VENTA));
+  for (const [productId, net] of sold) {
     if (net >= 0) continue;
     const qty = -net;
     await tx.product.update({
@@ -75,5 +132,43 @@ export async function restoreOrderStock(
         orderId,
       },
     });
+  }
+}
+
+export async function migrateOpenOrderReservations(): Promise<void> {
+  const open = await prisma.order.findMany({
+    where: { status: { notIn: ['CERRADO', 'CANCELADO', 'DEVUELTO'] } },
+    include: { stockMovements: true },
+  });
+  for (const order of open) {
+    const sold = netByProduct(order.stockMovements.filter((m) => m.reason === StockMovementReason.VENTA));
+    const reserved = reservationNet(order.stockMovements);
+    for (const [productId, net] of sold) {
+      if (net >= 0) continue;
+      const qty = -net;
+      if ((reserved.get(productId) ?? 0) >= qty) continue;
+      await prisma.product.update({
+        where: { id: productId },
+        data: { stockQty: { increment: qty }, reservedQty: { increment: qty } },
+      });
+      await prisma.stockMovement.create({
+        data: {
+          productId,
+          quantity: qty,
+          reason: StockMovementReason.VENTA,
+          orderId: order.id,
+          notes: 'Reversa salida física previa al cierre (migración a reserva)',
+        },
+      });
+      await prisma.stockMovement.create({
+        data: {
+          productId,
+          quantity: qty,
+          reason: StockMovementReason.RESERVA,
+          orderId: order.id,
+          notes: 'Reserva migrada',
+        },
+      });
+    }
   }
 }

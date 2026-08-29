@@ -1,11 +1,19 @@
 import { ProductStatus, StockMovementReason } from '@prisma/client';
 import { prisma } from '../db.js';
 import { badRequest, notFound } from '../http-error.js';
+import { availableQty } from '../domain/stock.js';
+import { addLot, consumeAdjustment } from './fifo.service.js';
+import { postStockAdjustJournal } from './accounting.service.js';
 
 const SKU_RE = /^[A-Z0-9]+(?:-[A-Z0-9]+)*$/;
 
+function presentProduct<T extends { stockQty: number; reservedQty: number }>(product: T) {
+  return { ...product, availableQty: availableQty(product.stockQty, product.reservedQty) };
+}
+
 export async function listProducts() {
-  return prisma.product.findMany({ orderBy: { sku: 'asc' } });
+  const rows = await prisma.product.findMany({ orderBy: { sku: 'asc' } });
+  return rows.map(presentProduct);
 }
 
 export async function getProduct(id: string) {
@@ -14,7 +22,7 @@ export async function getProduct(id: string) {
     include: { suppliers: { include: { supplier: true } } },
   });
   if (!product) notFound('Producto');
-  return product;
+  return presentProduct(product);
 }
 
 export async function getProductBySku(sku: string) {
@@ -23,7 +31,7 @@ export async function getProductBySku(sku: string) {
     include: { suppliers: { include: { supplier: true } } },
   });
   if (!product) notFound('Producto');
-  return product;
+  return presentProduct(product);
 }
 
 export async function listStockMovements(productId: string) {
@@ -76,8 +84,14 @@ export async function createProduct(data: {
           notes: 'Stock inicial',
         },
       });
+      await addLot(tx, {
+        productId: product.id,
+        receivedAt: new Date(),
+        quantity: stockQty,
+        unitCostPyg: 0,
+      });
     }
-    return product;
+    return presentProduct(product);
   });
 }
 
@@ -94,7 +108,7 @@ export async function updateProduct(
   if (data.unitPricePyg !== undefined && data.unitPricePyg !== null && data.unitPricePyg < 1) {
     badRequest('El precio de venta debe ser mayor a 0');
   }
-  return prisma.product.update({
+  const updated = await prisma.product.update({
     where: { id },
     data: {
       name: data.name?.trim(),
@@ -103,6 +117,7 @@ export async function updateProduct(
       status: data.status,
     },
   });
+  return presentProduct(updated);
 }
 
 export async function adjustStock(id: string, delta: number, notes?: string | null) {
@@ -111,11 +126,14 @@ export async function adjustStock(id: string, delta: number, notes?: string | nu
     const product = await tx.product.findUnique({ where: { id } });
     if (!product) notFound('Producto');
     if (product.stockQty + delta < 0) badRequest(`El stock no puede quedar negativo (hay ${product.stockQty})`);
+    if (availableQty(product.stockQty, product.reservedQty) + delta < 0 && delta < 0) {
+      badRequest(`No hay disponible suficiente para ajustar ${product.sku}`);
+    }
     const updated = await tx.product.update({
       where: { id },
       data: { stockQty: { increment: delta } },
     });
-    await tx.stockMovement.create({
+    const movement = await tx.stockMovement.create({
       data: {
         productId: id,
         quantity: delta,
@@ -123,6 +141,33 @@ export async function adjustStock(id: string, delta: number, notes?: string | nu
         notes: notes?.trim() || null,
       },
     });
-    return updated;
+    if (delta > 0) {
+      await addLot(tx, {
+        productId: id,
+        receivedAt: new Date(),
+        quantity: delta,
+        unitCostPyg: product.unitCostPyg ?? 0,
+      });
+      await postStockAdjustJournal(tx, {
+        productId: id,
+        movementId: movement.id,
+        costPyg: delta * (product.unitCostPyg ?? 0),
+        increase: true,
+        datedAt: new Date(),
+        quantity: delta,
+      });
+    } else {
+      const qty = -delta;
+      const consumed = await consumeAdjustment(tx, id, qty);
+      await postStockAdjustJournal(tx, {
+        productId: id,
+        movementId: movement.id,
+        costPyg: consumed.totalCostPyg,
+        increase: false,
+        datedAt: new Date(),
+        quantity: qty,
+      });
+    }
+    return presentProduct(updated);
   });
 }

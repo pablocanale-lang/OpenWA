@@ -5,7 +5,7 @@ export async function listSuppliers() {
   return prisma.supplier.findMany({
     include: {
       products: { include: { product: true } },
-      _count: { select: { purchases: true } },
+      _count: { select: { purchases: true, purchaseOrders: true } },
     },
     orderBy: { name: 'asc' },
   });

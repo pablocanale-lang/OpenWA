@@ -1,0 +1,27 @@
+---
+description: Cómo vincular WhatsApp en el VPS de Kampro (Chrome con pantalla). No copiar perfil de la PC ni usar headless.
+alwaysApply: true
+---
+
+# Gateway WhatsApp en el VPS (método que funciona)
+
+OpenWA en DigitalOcean (`root@206.189.206.119`, `/opt/openwa`) es solo el gateway. Motor: **whatsapp-web.js** (hace falta el historial si el VPS se apaga). Sesión de producción: **`pablo`** (id `3eb5967b-84eb-49ae-8f3a-cf46a435d4b6`), teléfono **595981051171**, pushName **Kampro**. Dashboard: https://app.kampro.store
+
+## Qué no hacer
+
+- Chrome **headless** en el VPS: el teléfono vincula y WhatsApp manda `LOGOUT` ~3–5 min; OpenWA borra LocalAuth y vuelve el QR.
+- **Copiar** `data/sessions/session-pablo` de Windows al Linux del VPS: el servidor pide QR de nuevo.
+- Escanear un QR del VPS si Chrome está headless o si acaba de haber `LOGOUT` / `auth_cleared`.
+- Cambiar a Baileys para “que conecte”: no guarda mensajes que llegan con el VPS apagado.
+- Publicar noVNC en `0.0.0.0`. No modificar `src/` de OpenWA salvo pedido explícito.
+
+## Método que sí funcionó (2026-08-29)
+
+Vincular **en el mismo VPS**, con Chrome **con ventana** sobre Xvfb + noVNC:
+
+1. Override en `/opt/openwa/docker-compose.override.yml` (copia en `.cursor/openwa-vps-novnc.override.yml`): sidecar `theasp/novnc`, `DISPLAY=novnc:0.0`, `PUPPETEER_HEADLESS=false`, `HOME=/home/openwa`, tmpfs `/tmp` y `/home/openwa:uid=997,gid=997,mode=700` (sin eso Chrome cae: `chrome_crashpad_handler: --database is required`).
+2. En `/opt/openwa/.env`: `ENGINE_TYPE=whatsapp-web.js`, `PUPPETEER_HEADLESS=false`. noVNC solo en `127.0.0.1:6080`. Ver pantalla: `ssh -L 6080:127.0.0.1:6080 root@206.189.206.119` → `http://127.0.0.1:6080/vnc.html?autoconnect=1`.
+3. Recrear `openwa-api`, **Start** `pablo`. En noVNC debe verse WhatsApp Web real (“Scan to log in”). Escanear el QR de `pablo` en app.kampro.store.
+4. Éxito = `ready` + teléfono, sin QR nuevo ni `LOGOUT` (~5 min). Si vuelve QR: **Stop** (no Logout) y no reescanear en bucle.
+
+Si hay que volver a vincular, repetir este camino. No improvisar otro.

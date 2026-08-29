@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import { lazyWithRetry as lazy } from '../utils/lazyWithRetry';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -12,6 +12,7 @@ import {
   useStatsOverviewQuery,
 } from '../hooks/queries';
 import { PageHeader } from '../components/PageHeader';
+import { BusinessDashboard } from '../components/BusinessDashboard';
 import './Dashboard.css';
 
 // recharts is heavy (~150kB gzip); load the analytics section on demand so it never bloats the
@@ -22,6 +23,7 @@ export function Dashboard() {
   const { t } = useTranslation();
   useDocumentTitle(t('dashboard.title'));
   const navigate = useNavigate();
+  const [panel, setPanel] = useState<'business' | 'whatsapp'>('business');
   const { data: sessions = [], isLoading: loadingSessions, error: sessionsError } = useSessionsQuery();
   const { data: stats } = useSessionStatsQuery();
   const { data: webhooks = [] } = useWebhooksQuery();
@@ -97,13 +99,27 @@ export function Dashboard() {
     <div className="dashboard">
       <PageHeader
         title={t('dashboard.title')}
-        subtitle={t('dashboard.subtitle')}
+        subtitle={panel === 'business' ? t('dashboard.subtitleBusiness') : t('dashboard.subtitle')}
         badge={
           <span className={`status-badge ${stats && stats.ready > 0 ? 'connected' : 'disconnected'}`}>
             {stats && stats.ready > 0 ? t('common.connected') : t('common.disconnected')}
           </span>
         }
       />
+
+      <div className="panel-tabs">
+        <button type="button" className={panel === 'business' ? 'active' : undefined} onClick={() => setPanel('business')}>
+          {t('dashboard.tabs.business')}
+        </button>
+        <button type="button" className={panel === 'whatsapp' ? 'active' : undefined} onClick={() => setPanel('whatsapp')}>
+          {t('dashboard.tabs.whatsapp')}
+        </button>
+      </div>
+
+      {panel === 'business' && <BusinessDashboard />}
+
+      {panel === 'whatsapp' && (
+        <>
 
       <div className="stats-grid">
         {statsCards.map(({ label, value, icon: Icon, detail }) => (
@@ -170,6 +186,8 @@ export function Dashboard() {
           )}
         </div>
       </section>
+        </>
+      )}
     </div>
   );
 }

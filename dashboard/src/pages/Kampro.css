@@ -39,6 +39,10 @@
   margin-bottom: 1.5rem;
 }
 
+.kampro-page .stats-grid-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+
 .kampro-page .stat-card {
   background: var(--bg-white);
   border-radius: 12px;
@@ -62,6 +66,10 @@
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.03em;
+}
+
+.kampro-page .stat-card .value-sm {
+  font-size: 1.25rem;
 }
 
 .kampro-page .tabs {
@@ -116,7 +124,8 @@
 }
 
 .kampro-page .form-grid input,
-.kampro-page .form-grid select {
+.kampro-page .form-grid select,
+.kampro-page .form-grid textarea {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.6rem 0.75rem;
@@ -126,9 +135,182 @@
 }
 
 .kampro-page .form-grid input:focus,
-.kampro-page .form-grid select:focus {
+.kampro-page .form-grid select:focus,
+.kampro-page .form-grid textarea:focus {
   outline: 2px solid var(--primary, #25d366);
   outline-offset: 1px;
+}
+
+.kampro-page .form-title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.kampro-page .form-subtitle {
+  margin: 1rem 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+.kampro-page .invoice-row {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.kampro-page .po-lines {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.kampro-page .po-lines-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.kampro-page .po-lines-head .form-subtitle {
+  margin: 0;
+}
+
+.kampro-page .po-lines-table table {
+  width: 100%;
+}
+
+.kampro-page .po-lines-table select,
+.kampro-page .po-lines-table input {
+  width: 100%;
+}
+
+.kampro-page .invoice-row-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.kampro-page .po-status {
+  display: inline-flex;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.kampro-page .po-status-borrador {
+  background: var(--bg-light);
+  color: var(--text-secondary);
+}
+
+.kampro-page .po-status-confirmada {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+}
+
+.kampro-page .po-status-cerrada {
+  background: rgba(37, 211, 102, 0.12);
+  color: var(--primary-text, #166534);
+}
+
+.kampro-page .po-status-cancelada {
+  background: rgba(220, 38, 38, 0.1);
+  color: #b91c1c;
+}
+
+.kampro-page .po-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.kampro-page .po-actions .btn-primary {
+  padding: 0.4rem 0.7rem;
+  font-size: 0.8rem;
+}
+
+.kampro-page .po-menu {
+  position: relative;
+}
+
+.kampro-page .po-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-white);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.kampro-page .po-menu-trigger:hover,
+.kampro-page .po-menu.open .po-menu-trigger {
+  background: var(--bg-light);
+  color: var(--text-primary);
+}
+
+.po-menu-pop {
+  position: fixed;
+  z-index: 900;
+  min-width: 12.5rem;
+  overflow: auto;
+  background: var(--bg-white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  padding: 0.35rem;
+}
+
+.po-menu-pop button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.po-menu-pop button:hover {
+  background: var(--bg-light);
+}
+
+.po-menu-pop button.danger {
+  color: #b91c1c;
+}
+
+.kampro-page .po-detail {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.kampro-page .po-detail p,
+.kampro-page .po-detail ul {
+  margin: 0;
+}
+
+.kampro-modal-field {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.kampro-modal-field input {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  font: inherit;
 }
 
 .kampro-page .hint {
@@ -180,7 +362,8 @@
 }
 
 @media (max-width: 1024px) {
-  .kampro-page .stats-grid {
+  .kampro-page .stats-grid,
+  .kampro-page .stats-grid-5 {
     grid-template-columns: repeat(2, 1fr);
   }
 }
@@ -190,6 +373,7 @@
     padding: 1.25rem;
   }
   .kampro-page .stats-grid,
+  .kampro-page .stats-grid-5,
   .kampro-page .form-grid {
     grid-template-columns: 1fr;
   }

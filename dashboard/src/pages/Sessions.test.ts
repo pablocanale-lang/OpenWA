@@ -59,7 +59,17 @@ const SESSION_TIMELOCKED: Session = {
   restriction: { kind: 'reachout_timelock', code: 'BIZ_QUALITY', expiresAt: '2026-08-04T09:00:00.000Z' },
 };
 
-const SESSIONS = [SESSION_QR, SESSION_STALE_ENGINE, SESSION_TIMELOCKED];
+const SESSION_ORPHAN_QR: Session = {
+  id: 'sess-orphan-qr-1',
+  name: 'orphan-qr',
+  status: 'qr_ready',
+  engineLoaded: false,
+  phone: null,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+};
+
+const SESSIONS = [SESSION_QR, SESSION_STALE_ENGINE, SESSION_TIMELOCKED, SESSION_ORPHAN_QR];
 
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -241,6 +251,23 @@ test('the session list renders, and action buttons gate on engineLoaded rather t
 
   const qrCard = screen.getByText('new-device').closest('.session-card') as HTMLElement;
   within(qrCard).getByRole('button', { name: 'Show QR' });
+});
+
+test('Reconnect on a qr_ready card with no live engine POSTs /start instead of only opening the modal', async () => {
+  const { screen, fireEvent, waitFor, within } = rtl;
+  resetFetchCalls();
+  renderSessions();
+
+  await screen.findByText('orphan-qr');
+  const card = screen.getByText('orphan-qr').closest('.session-card') as HTMLElement;
+  fireEvent.click(within(card).getByRole('button', { name: 'Reconnect' }));
+
+  await waitFor(() => {
+    assert.ok(
+      findFetchCall('POST', '/api/sessions/sess-orphan-qr-1/start'),
+      'expected POST /start for a stale qr_ready row with no engine',
+    );
+  });
 });
 
 test('creating a session issues POST /api/sessions with the entered name', async () => {

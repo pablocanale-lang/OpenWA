@@ -26,6 +26,7 @@ const Plugins = lazy(() => import('./pages/Plugins'));
 const Kampro = lazy(() => import('./pages/Kampro').then(m => ({ default: m.Kampro })));
 const Inventory = lazy(() => import('./pages/Inventory').then(m => ({ default: m.Inventory })));
 const Orders = lazy(() => import('./pages/Orders').then(m => ({ default: m.Orders })));
+const Accounting = lazy(() => import('./pages/Accounting').then(m => ({ default: m.Accounting })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -118,6 +119,7 @@ function AppContent() {
               <Route path="orders" element={<Orders />} />
               <Route path="inventory" element={<Inventory />} />
               <Route path="imports" element={<Kampro />} />
+              <Route path="accounting" element={<Accounting />} />
               <Route path="kampro" element={<Navigate to="/imports" replace />} />
               <Route path="webhooks" element={<Webhooks />} />
               <Route path="templates" element={<Templates />} />

@@ -16,6 +16,7 @@ import {
   Package,
   Warehouse,
   ShoppingBag,
+  BookOpen,
   Sun,
   Moon,
   Monitor,
@@ -28,7 +29,6 @@ import {
 import { useTheme } from '../hooks/useTheme';
 import { type UserRole } from '../hooks/useRole';
 import { languageOptions, resolveSupportedLanguage, rtlLanguages, type SupportedLanguage } from '../i18n';
-import { healthApi } from '../services/api';
 import './Layout.css';
 
 interface LayoutProps {
@@ -43,6 +43,7 @@ const allNavItems = [
   { to: '/orders', icon: ShoppingBag, key: 'orders' as const, adminOnly: false },
   { to: '/inventory', icon: Warehouse, key: 'inventory' as const, adminOnly: false },
   { to: '/imports', icon: Package, key: 'imports' as const, adminOnly: false },
+  { to: '/accounting', icon: BookOpen, key: 'accounting' as const, adminOnly: false },
   { to: '/webhooks', icon: Webhook, key: 'webhooks' as const, adminOnly: false },
   { to: '/templates', icon: ClipboardList, key: 'templates' as const, adminOnly: false },
   { to: '/api-keys', icon: Key, key: 'apiKeys' as const, adminOnly: true },
@@ -66,9 +67,6 @@ export function Layout({ onLogout, userRole }: LayoutProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  // Show the build-time version immediately, then replace it with the live running version from the
-  // backend so a stale-built bundle can't display the wrong number. Falls back silently on error.
-  const [version, setVersion] = useState(__APP_VERSION__);
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
   const languageMenuRef = useRef<HTMLDivElement>(null);
 
@@ -80,21 +78,6 @@ export function Layout({ onLogout, userRole }: LayoutProps) {
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    healthApi
-      .check()
-      .then(info => {
-        if (active && info?.version) setVersion(info.version);
-      })
-      .catch(() => {
-        /* keep the build-time fallback */
-      });
-    return () => {
-      active = false;
-    };
   }, []);
 
   const handleNavClick = () => {
@@ -147,8 +130,7 @@ export function Layout({ onLogout, userRole }: LayoutProps) {
             {isMobileOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
           <div className="mobile-brand">
-            <img src="/openwa_logo.webp" alt="OpenWA" className="sidebar-logo" />
-            <span className="brand-name">{t('common.appName')}</span>
+            <img src="/kampro-logo.png?v=3" alt="Kampro" className="sidebar-logo" />
           </div>
           <div style={{ width: 40 }} />
         </header>
@@ -160,13 +142,7 @@ export function Layout({ onLogout, userRole }: LayoutProps) {
         className={`sidebar ${isCollapsed ? 'collapsed' : ''} ${isMobile ? 'mobile' : ''} ${isMobileOpen ? 'open' : ''}`}
       >
         <div className="sidebar-header">
-          <img src="/openwa_logo.webp" alt="OpenWA" className="sidebar-logo" />
-          {!isCollapsed && (
-            <div className="sidebar-brand">
-              <span className="brand-name">{t('common.appName')}</span>
-              <span className="brand-version">v{version}</span>
-            </div>
-          )}
+          <img src="/kampro-logo.png?v=3" alt="Kampro" className="sidebar-logo" />
         </div>
 
         {!isMobile && (

@@ -12,6 +12,7 @@ import {
   type KamproProduct,
   type OrderZone,
   type PaymentMethod,
+  type InvoiceSettlement,
 } from '../../services/kamproApi';
 import { latestIncomingLocation, type LocationPin } from '../../utils/chatLocation';
 import { quoteLinesTotalPyg, sanitizeRucInput, type OrderLineDraft } from '../../utils/orderPricing';
@@ -56,6 +57,7 @@ export function OrderQuickPanel({
   const [recipientName, setRecipientName] = useState(contactName);
   const [invoiceName, setInvoiceName] = useState(contactName);
   const [ruc, setRuc] = useState('');
+  const [invoiceSettlement, setInvoiceSettlement] = useState<InvoiceSettlement>('CONTADO');
   const [preferredTime, setPreferredTime] = useState('');
   const [payMethod, setPayMethod] = useState<PaymentMethod>('EFECTIVO');
   const [pin, setPin] = useState<LocationPin | null>(null);
@@ -164,6 +166,7 @@ export function OrderQuickPanel({
         recipientName: recipientName.trim(),
         invoiceName: invoiceName.trim(),
         ruc: ruc.trim(),
+        invoiceSettlement,
         sessionId,
         chatId: chat.id,
       };
@@ -328,6 +331,13 @@ export function OrderQuickPanel({
                 />
               </label>
               <label>
+                {t('orders.fields.settlement')}
+                <select value={invoiceSettlement} onChange={e => setInvoiceSettlement(e.target.value as InvoiceSettlement)}>
+                  <option value="CONTADO">{t('orders.fields.cashSale')}</option>
+                  <option value="CREDITO">{t('orders.fields.creditSale')}</option>
+                </select>
+              </label>
+              <label>
                 {t('orders.fields.preferredTime')}
                 <input type="datetime-local" value={preferredTime} onChange={e => setPreferredTime(e.target.value)} />
               </label>
@@ -369,6 +379,13 @@ export function OrderQuickPanel({
                   pattern="[0-9]+(-[0-9]+)?"
                   onChange={e => setRuc(sanitizeRucInput(e.target.value))}
                 />
+              </label>
+              <label>
+                {t('orders.fields.settlement')}
+                <select value={invoiceSettlement} onChange={e => setInvoiceSettlement(e.target.value as InvoiceSettlement)}>
+                  <option value="CONTADO">{t('orders.fields.cashSale')}</option>
+                  <option value="CREDITO">{t('orders.fields.creditSale')}</option>
+                </select>
               </label>
               <p className="order-quick-panel__hint">{t('orders.prepaidHint')}</p>
             </div>

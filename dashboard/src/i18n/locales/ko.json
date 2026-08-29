@@ -6,7 +6,7 @@
     }
   },
   "common": {
-    "appName": "OpenWA",
+    "appName": "Kampro",
     "loading": "로딩 중...",
     "cancel": "취소",
     "delete": "삭제",
@@ -66,7 +66,8 @@
     "logs": "로그",
     "imports": "수입",
     "orders": "주문",
-    "inventory": "Inventory"
+    "inventory": "Inventory",
+    "accounting": "Accounting"
   },
   "chats": {
     "media": {
@@ -239,6 +240,54 @@
       "messages": "메시지",
       "empty": "이 기간에는 메시지 활동이 없습니다.",
       "error": "메시지 분석을 불러올 수 없습니다. 서버 로그를 확인하세요."
+    },
+    "subtitleBusiness": "Sales, collections and inventory for Kampro",
+    "tabs": {
+      "business": "Business",
+      "whatsapp": "WhatsApp"
+    },
+    "business": {
+      "period": {
+        "day": "Day",
+        "week": "Week",
+        "month": "Month",
+        "year": "Year"
+      },
+      "revenue": "Revenue",
+      "vsPrevious": "vs previous period",
+      "goal": "Sales target",
+      "goalNone": "No target set",
+      "goalRemaining": "Remaining",
+      "goalSave": "Save",
+      "goalPlaceholder": "Gs",
+      "avgTicket": "Average ticket",
+      "units": "Units sold",
+      "paidOrders": "Paid orders",
+      "overTime": "Revenue over time",
+      "byProduct": "Revenue by product",
+      "byZone": "Delivery vs encomienda",
+      "delivery": "Asunción delivery",
+      "encomienda": "Interior (encomienda)",
+      "byMethod": "Payment method",
+      "cash": "Cash",
+      "transfer": "Transfer",
+      "customers": "Customers",
+      "newCustomers": "New",
+      "returningCustomers": "Returning",
+      "pending": "Outstanding",
+      "pendingHint": "Confirmed orders still unpaid. Delivery can ship with COD; encomienda should not.",
+      "pipeline": "Open orders",
+      "stock": "Stock on hand",
+      "importSpend": "Import spend",
+      "importMissingFx": "Some China costs have no FX, so they are not converted to Gs.",
+      "invoices": "Invoices in period",
+      "followUps": "Chats marked for follow-up",
+      "offline": "Kampro CRM is offline. Start it to see business metrics.",
+      "empty": "No paid sales in this period.",
+      "noStock": "No products in inventory yet.",
+      "noteRevenue": "Revenue counts confirmed payments only.",
+      "noteCustomers": "New = first confirmed payment in this period.",
+      "noteUnits": "Units are counted once per order."
     }
   },
   "sessionStatus": {
@@ -985,38 +1034,41 @@
     "loading": "검색하는 중…"
   },
   "kampro": {
-    "title": "수입",
-    "subtitle": "Import and supply for agricultural tools. Stock updates when a reception is registered.",
+    "title": "Import",
+    "subtitle": "Purchase orders to supplier and forwarder. Stock updates when an order is closed.",
     "connected": "Connected",
     "offline": "API offline",
     "offlineHint": "Start the Kampro API (start-kampro.bat) while OpenWA is running. This screen stays inside the OpenWA dashboard.",
-    "todoStock": "Reorder rules are not defined yet and are not implemented.",
-    "costHint": "Costs without a purchase are prorated by quantity across the shipment.",
-    "receiveHint": "Received quantity enters stock. Damaged units (DANADO) do not. A quantity mismatch creates an incident if you do not add one.",
-    "reportNote": "PYG totals appear only when each line is in PYG or has an exchange rate. FX is never invented.",
-    "prorate": "Prorated across shipment",
+    "catalogHint": "Add a supplier and a forwarder (control tabs) and keep products in Inventory before creating a purchase order.",
+    "confirmHint": "The purchase order is confirmed once the payment receipt is loaded.",
+    "closeHint": "Closing records reception, customs, dispatch and invoices. That quantity enters inventory.",
+    "moreActions": "More actions",
+    "editHint": "You can edit at any stage except cancelled. If the order is already closed, changing product or quantity adjusts inventory.",
+    "cancelHint": "The purchase order is cancelled and no longer counts as a purchase.",
+    "cancelClosedHint": "This closed order already updated inventory. Cancelling it reverses those units.",
+    "receiveHint": "Receptions from closed purchase orders. Each close adds units to inventory.",
     "tabs": {
-      "products": "Products",
+      "orders": "Purchase orders",
       "suppliers": "Suppliers",
-      "purchases": "Purchases",
-      "shipments": "Shipments",
-      "costs": "Import costs",
-      "receptions": "Receiving",
-      "report": "SKU cost"
+      "forwarders": "Forwarders",
+      "receptions": "Receptions",
+      "invoices": "Invoices"
     },
     "stats": {
-      "skus": "SKUs",
-      "stock": "Units in stock",
-      "purchases": "Purchases",
-      "shipments": "Shipments",
-      "purchased": "Purchased"
+      "draft": "Draft",
+      "open": "Open",
+      "closed": "Closed",
+      "units": "Units purchased",
+      "spent": "Total spent (Gs)"
+    },
+    "status": {
+      "BORRADOR": "Draft",
+      "CONFIRMADA": "Confirmed",
+      "CERRADA": "Closed",
+      "CANCELADA": "Cancelled"
     },
     "col": {
-      "sku": "SKU",
       "name": "Name",
-      "capacity": "Capacity",
-      "stock": "Stock",
-      "unitCost": "Unit cost (PYG)",
       "country": "Country",
       "contact": "Contact",
       "alibaba": "Alibaba",
@@ -1025,36 +1077,66 @@
       "qty": "Qty",
       "unit": "Unit price",
       "total": "Total",
-      "fx": "FX to PYG",
-      "shipment": "Shipment",
       "forwarder": "Forwarder",
       "status": "Status",
-      "departed": "Departed",
-      "eta": "ETA",
-      "arrived": "Arrived",
-      "type": "Type",
       "amount": "Amount",
-      "allocation": "Allocation",
-      "received": "Received",
-      "incidents": "Incidents",
-      "landed": "Landed PYG"
+      "product": "Product name",
+      "origin": "Origin",
+      "destination": "Destination",
+      "orderedAt": "Order date",
+      "freight": "Freight",
+      "otherCharges": "Other charges",
+      "comments": "Comments",
+      "paymentReceipt": "Payment receipt",
+      "receivedAt": "Reception date",
+      "customs": "Customs",
+      "dispatch": "Dispatch",
+      "invoiceNumber": "Invoice no.",
+      "ruc": "RUC",
+      "legalName": "Legal name",
+      "actions": "Actions",
+      "orders": "Orders",
+      "fx": "FX (China purchase to Gs)",
+      "currency": "Currency",
+      "pygTotal": "Amount in Gs",
+      "treasury": "Paid from",
+      "refundAmount": "Amount returned (Gs)",
+      "refundReference": "Refund reference"
     },
     "form": {
+      "newOrder": "New purchase order",
+      "createOrder": "Save draft",
       "createSupplier": "Add supplier",
-      "createPurchase": "Register purchase",
       "createForwarder": "Add forwarder",
-      "createShipment": "Register shipment",
-      "createCost": "Add import cost",
-      "createReception": "Register reception",
-      "assignPurchase": "Purchase",
-      "none": "None",
-      "description": "Description"
+      "confirm": "Confirm order",
+      "close": "Close order",
+      "edit": "Edit",
+      "saveEdit": "Save changes",
+      "cancelOrder": "Cancel order",
+      "detail": "View details",
+      "invoices": "Invoices",
+      "addInvoice": "Add invoice",
+      "removeInvoice": "Remove invoice",
+      "products": "Products",
+      "addProductLine": "Add product",
+      "removeProductLine": "Remove"
     },
+    "currency": {
+      "PYG": "Guaranies (PYG)",
+      "USD": "US dollars (USD)",
+      "JPY": "Yen"
+    },
+    "fxHintPyg": "In PYG there is no exchange rate - the amounts are already in guaranies.",
     "toast": {
       "created": "Saved",
-      "received": "Received — stock updated",
+      "drafted": "Purchase order saved as draft",
+      "confirmed": "Purchase order confirmed",
+      "closed": "Order closed — inventory updated",
+      "updated": "Purchase order updated",
+      "cancelled": "Purchase order cancelled",
       "error": "Could not save"
-    }
+    },
+    "cancelRefundHint": "Record the amount returned to cash or the bank. Without that refund the order cannot be cancelled."
   },
   "orders": {
     "openPanel": "Order",
@@ -1098,7 +1180,10 @@
       "reference": "Receipt / reference",
       "products": "Products",
       "shippingCost": "Shipping cost (Gs)",
-      "invoice": "Invoice"
+      "invoice": "Invoice",
+      "settlement": "Invoice terms",
+      "cashSale": "Cash",
+      "creditSale": "Credit"
     },
     "zone": {
       "asuncion": "Asunción and surroundings",
@@ -1189,7 +1274,9 @@
       "stock": "Units",
       "price": "Sale price (Gs)",
       "status": "Status",
-      "actions": "Actions"
+      "actions": "Actions",
+      "reserved": "Reserved",
+      "available": "Available"
     },
     "status": {
       "active": "Active",
@@ -1205,12 +1292,100 @@
       "AJUSTE": "Adjustment",
       "VENTA": "Sale",
       "CANCELACION_PEDIDO": "Order cancelled",
-      "DEVOLUCION": "Return / refund"
+      "CANCELACION_COMPRA": "Purchase order cancelled",
+      "DEVOLUCION": "Return / refund",
+      "RESERVA": "Reserved for order"
     },
     "toast": {
       "created": "Product added",
       "priceSaved": "Sale price saved",
       "stockSaved": "Stock updated",
+      "error": "Could not save"
+    }
+  },
+  "accounting": {
+    "subtitle": "Journal entries from sales, imports, expenses and manual postings. All amounts in guaraníes. VAT is included in prices and extracted by dividing by 11.",
+    "offlineHint": "Start the Kampro API (start-kampro.bat) while OpenWA is running.",
+    "from": "From",
+    "to": "To",
+    "emptyJournal": "No journal entries in this period.",
+    "debit": "Debit",
+    "credit": "Credit",
+    "balance": "Balance",
+    "account": "Account",
+    "pickAccount": "Choose an account",
+    "incomeStatement": "Income statement",
+    "balanceSheet": "Balance sheet",
+    "cashFlow": "Cash flow",
+    "revenue": "Revenue",
+    "cogs": "Cost of goods sold",
+    "grossMargin": "Gross margin",
+    "expenses": "Expenses",
+    "netIncome": "Net income",
+    "assets": "Assets",
+    "liabilities": "Liabilities",
+    "equity": "Equity",
+    "operating": "Operating",
+    "investing": "Investing",
+    "financing": "Financing",
+    "netCash": "Net cash change",
+    "addExpense": "Record expense",
+    "saveExpense": "Save expense",
+    "kind": "Type",
+    "amount": "Amount (Gs, VAT included)",
+    "treasury": "Paid from",
+    "caja": "Cash",
+    "banco": "Bank",
+    "description": "Description",
+    "vendor": "Supplier / payee",
+    "reference": "Reference",
+    "ivaIncluded": "Amount includes VAT (÷11)",
+    "defaultAccount": "Default account for this type",
+    "addAccount": "Add account",
+    "saveAccount": "Save account",
+    "name": "Name",
+    "type": "Type",
+    "parent": "Parent account",
+    "noParent": "No parent",
+    "code": "Code",
+    "manualTitle": "Manual journal entry",
+    "manualHint": "Debits must equal credits. Use this for salaries already typed as expenses, opening balances later, or anything the other modules do not post.",
+    "addLine": "Add line",
+    "saveManual": "Post entry",
+    "tabs": {
+      "journal": "Journal",
+      "ledger": "Ledger",
+      "statements": "Statements",
+      "expenses": "Expenses",
+      "accounts": "Chart of accounts",
+      "manual": "Manual entry"
+    },
+    "col": {
+      "number": "No.",
+      "date": "Date",
+      "memo": "Memo",
+      "origin": "Source",
+      "debit": "Debit",
+      "credit": "Credit"
+    },
+    "kinds": {
+      "GENERAL": "General",
+      "SALARIO": "Payroll",
+      "PUBLICIDAD": "Advertising",
+      "OTRO": "Other"
+    },
+    "types": {
+      "ASSET": "Asset",
+      "LIABILITY": "Liability",
+      "EQUITY": "Equity",
+      "INCOME": "Income",
+      "COST": "Cost",
+      "EXPENSE": "Expense"
+    },
+    "toast": {
+      "expenseSaved": "Expense recorded",
+      "accountSaved": "Account added",
+      "manualSaved": "Journal entry posted",
       "error": "Could not save"
     }
   }

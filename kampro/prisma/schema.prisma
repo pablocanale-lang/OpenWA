@@ -23,19 +23,32 @@ model Product {
   unitPricePyg Int?
   /// Último costo unitario en PYG cuando hay equivalencia (compra+importación con FX o moneda PYG).
   unitCostPyg  Int?
+  /// Unidades físicas en depósito (salen al cerrar la venta, no al crear el pedido).
   stockQty     Int           @default(0)
+  /// Pedidos abiertos que todavía no cerraron: no se pueden volver a vender.
+  reservedQty  Int           @default(0)
   status       ProductStatus @default(ACTIVE)
   /// TODO negocio: criterio de reposición. No usar todavía.
   reorderPoint Int?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  suppliers      SupplierProduct[]
-  purchases      Purchase[]
-  stockMovements StockMovement[]
+  suppliers           SupplierProduct[]
+  purchases           Purchase[]
+  purchaseOrders      PurchaseOrder[]
+  purchaseOrderLines  PurchaseOrderLine[]
+  stockMovements      StockMovement[]
+  inventoryLots       InventoryLot[]
 }
 
 // ─── Importación y abastecimiento ───────────────────────────────────────────
+
+enum PurchaseOrderStatus {
+  BORRADOR
+  CONFIRMADA
+  CERRADA
+  CANCELADA
+}
 
 enum ShipmentStatus {
   COORDINADO
@@ -61,8 +74,10 @@ enum ReceptionIncidentType {
 enum StockMovementReason {
   RECEPCION
   AJUSTE
+  RESERVA
   VENTA
   CANCELACION_PEDIDO
+  CANCELACION_COMPRA
   DEVOLUCION
 }
 
@@ -76,8 +91,9 @@ model Supplier {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  products  SupplierProduct[]
-  purchases Purchase[]
+  products       SupplierProduct[]
+  purchases      Purchase[]
+  purchaseOrders PurchaseOrder[]
 }
 
 model SupplierProduct {
@@ -99,7 +115,8 @@ model Forwarder {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  shipments Shipment[]
+  shipments      Shipment[]
+  purchaseOrders PurchaseOrder[]
 }
 
 model Purchase {
@@ -128,6 +145,99 @@ model Purchase {
   @@index([supplierId])
   @@index([shipmentId])
   @@index([purchasedAt])
+}
+
+/// Orden de compra a proveedor (flujo operativo de importación).
+model PurchaseOrder {
+  id             String              @id @default(cuid())
+  status         PurchaseOrderStatus @default(BORRADOR)
+  orderedAt      DateTime
+  forwarderId    String
+  supplierId     String
+  origin         String
+  destination    String
+  productId      String
+  quantity       Int
+  unitPrice      Decimal
+  freight        Decimal             @default(0)
+  otherCharges   Decimal             @default(0)
+  /// Tipo de cambio de la compra en China a PYG. Al confirmar el pago queda como tipo contable.
+  fxRateToPyg    Decimal?
+  comments       String?
+  currency       String              @default("USD")
+  paymentReceipt String?
+  /// Caja o banco desde donde salió el pago al proveedor.
+  treasury       TreasuryAccount     @default(BANCO)
+  /// Caja o banco del pago local (aduana/despacho) al cerrar.
+  localTreasury  TreasuryAccount     @default(BANCO)
+  confirmedAt    DateTime?
+  receivedAt     DateTime?
+  customsCost    Decimal?
+  dispatchCost   Decimal?
+  closedAt       DateTime?
+  cancelledAt    DateTime?
+  refundAmountPyg Int?
+  refundTreasury  TreasuryAccount?
+  refundAt        DateTime?
+  refundReference String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  forwarder      Forwarder               @relation(fields: [forwarderId], references: [id], onDelete: Restrict)
+  supplier       Supplier                @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  product        Product                 @relation(fields: [productId], references: [id], onDelete: Restrict)
+  lines          PurchaseOrderLine[]
+  invoices       PurchaseOrderInvoice[]
+  stockMovements StockMovement[]
+  inventoryLots  InventoryLot[]
+
+  @@index([status])
+  @@index([orderedAt])
+  @@index([supplierId])
+  @@index([productId])
+  @@index([forwarderId])
+}
+
+model PurchaseOrderLine {
+  id              String   @id @default(cuid())
+  purchaseOrderId String
+  productId       String
+  quantity        Int
+  unitPrice       Decimal
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([purchaseOrderId])
+  @@index([productId])
+}
+
+model PurchaseOrderInvoice {
+  id              String   @id @default(cuid())
+  purchaseOrderId String
+  invoiceNumber   String
+  ruc             String
+  legalName       String
+  issuedAt        DateTime
+  amount          Decimal
+  createdAt       DateTime @default(now())
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId])
+  @@index([issuedAt])
+}
+
+/// Metas de ingresos en Gs. Null = no cargada (no se inventa).
+model SalesTarget {
+  id        String   @id @default("default")
+  dayPyg    Int?
+  weekPyg   Int?
+  monthPyg  Int?
+  yearPyg   Int?
+  updatedAt DateTime @updatedAt
 }
 
 model Shipment {
@@ -207,17 +317,20 @@ model StockMovement {
   productId   String
   quantity    Int
   reason      StockMovementReason
-  receptionId String?
-  orderId     String?
-  notes       String?
-  createdAt   DateTime             @default(now())
+  receptionId     String?
+  orderId         String?
+  purchaseOrderId String?
+  notes           String?
+  createdAt       DateTime             @default(now())
 
-  product   Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
-  reception Reception? @relation(fields: [receptionId], references: [id], onDelete: SetNull)
-  order     Order?     @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  product       Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  reception     Reception?     @relation(fields: [receptionId], references: [id], onDelete: SetNull)
+  order         Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
 
   @@index([productId, createdAt])
   @@index([orderId])
+  @@index([purchaseOrderId])
 }
 
 // ─── Pedidos y pagos (venta) ────────────────────────────────────────────────
@@ -237,6 +350,16 @@ enum OrderStatus {
   CERRADO
   CANCELADO
   DEVUELTO
+}
+
+enum InvoiceSettlement {
+  CONTADO
+  CREDITO
+}
+
+enum TreasuryAccount {
+  CAJA
+  BANCO
 }
 
 enum PaymentMethod {
@@ -265,6 +388,8 @@ model Order {
   recipientName    String
   invoiceName      String
   ruc              String
+  /// Contado o crédito al emitir la factura. Define CxC vs tesorería/anticipo al cerrar.
+  invoiceSettlement InvoiceSettlement @default(CONTADO)
   status           OrderStatus
   sessionId        String?
   chatId           String?
@@ -288,6 +413,7 @@ model Order {
   items          OrderLine[]
   payments       Payment[]
   stockMovements StockMovement[]
+  lotConsumptions LotConsumption[]
 
   @@index([status])
   @@index([customerPhone])
@@ -343,4 +469,185 @@ model Payment {
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
+}
+
+// ─── Contabilidad ───────────────────────────────────────────────────────────
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  COST
+  EXPENSE
+}
+
+enum AccountRole {
+  CAJA
+  BANCO
+  CXC
+  ANTICIPO_CLIENTES
+  ANTICIPO_PROVEEDORES
+  IVA_CREDITO
+  IVA_DEBITO
+  INVENTARIO
+  TRANSITO
+  CXP
+  VENTAS
+  DESCUENTOS
+  CMV
+  FLETE_VENTAS
+  PUBLICIDAD
+  SUELDOS
+  CARGAS_SOCIALES
+  GASTOS_BANCARIOS
+  GASTOS_GENERALES
+  AJUSTE_INVENTARIO
+  CAPITAL
+  RESULTADOS_ACUMULADOS
+  RESULTADO_EJERCICIO
+  BIENES_USO
+  REMUNERACIONES_PAGAR
+}
+
+enum JournalSource {
+  ORDER
+  PAYMENT
+  PURCHASE_ORDER
+  EXPENSE
+  MANUAL
+  STOCK
+  OPENING
+}
+
+enum ExpenseKind {
+  GENERAL
+  SALARIO
+  PUBLICIDAD
+  OTRO
+}
+
+enum CashFlowClass {
+  OPERATING
+  INVESTING
+  FINANCING
+}
+
+model Account {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  name      String
+  type      AccountType
+  role      AccountRole? @unique
+  parentId  String?
+  postable  Boolean      @default(true)
+  system    Boolean      @default(false)
+  active    Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  parent   Account?      @relation("AccountTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children Account[]     @relation("AccountTree")
+  lines    JournalLine[]
+  expenses Expense[]
+
+  @@index([parentId])
+  @@index([type])
+}
+
+model JournalSequence {
+  id         String @id @default("default")
+  nextNumber Int    @default(1)
+}
+
+model JournalEntry {
+  id         String        @id @default(cuid())
+  number     Int           @unique
+  numberLabel String       @unique
+  datedAt    DateTime
+  memo       String
+  sourceType JournalSource
+  sourceId   String
+  event      String
+  cashFlow   CashFlowClass @default(OPERATING)
+  reversesId String?       @unique
+  postedAt   DateTime      @default(now())
+  createdAt  DateTime      @default(now())
+
+  lines     JournalLine[]
+  reverses  JournalEntry? @relation("JournalReversal", fields: [reversesId], references: [id], onDelete: SetNull)
+  reversedBy JournalEntry? @relation("JournalReversal")
+
+  @@index([datedAt])
+  @@index([sourceType, sourceId, event])
+}
+
+model JournalLine {
+  id        String  @id @default(cuid())
+  entryId   String
+  accountId String
+  debit     Int     @default(0)
+  credit    Int     @default(0)
+  memo      String?
+  productId String?
+  quantity  Int?
+  sortOrder Int     @default(0)
+
+  entry   JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  account Account      @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([entryId])
+  @@index([accountId])
+}
+
+model InventoryLot {
+  id              String   @id @default(cuid())
+  productId       String
+  purchaseOrderId String?
+  receivedAt      DateTime
+  qtyOriginal     Int
+  qtyRemaining    Int
+  unitCostPyg     Int
+  createdAt       DateTime @default(now())
+
+  product       Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
+  purchaseOrder PurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  consumptions  LotConsumption[]
+
+  @@index([productId, receivedAt])
+  @@index([purchaseOrderId])
+}
+
+model LotConsumption {
+  id          String   @id @default(cuid())
+  lotId       String
+  orderId     String?
+  quantity    Int
+  unitCostPyg Int
+  createdAt   DateTime @default(now())
+
+  lot   InventoryLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  order Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([lotId])
+  @@index([orderId])
+}
+
+model Expense {
+  id             String          @id @default(cuid())
+  kind           ExpenseKind     @default(GENERAL)
+  datedAt        DateTime
+  description    String
+  amountGrossPyg Int
+  ivaIncluded    Boolean         @default(true)
+  treasury       TreasuryAccount
+  accountId      String
+  vendor         String?
+  reference      String?
+  createdAt      DateTime        @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([datedAt])
+  @@index([kind])
 }

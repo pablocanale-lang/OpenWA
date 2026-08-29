@@ -20,3 +20,12 @@ export function qtyNeededBySku(lines: Array<{ sku: string; quantity: number }>):
 export function saleDelta(currentNet: number, neededQty: number): number {
   return -neededQty - currentNet;
 }
+
+export function availableQty(stockQty: number, reservedQty: number): number {
+  return stockQty - reservedQty;
+}
+
+/** Delta de reserva: positivo reserva más; negativo libera. */
+export function reservationDelta(currentReservedForOrder: number, neededQty: number): number {
+  return neededQty - currentReservedForOrder;
+}

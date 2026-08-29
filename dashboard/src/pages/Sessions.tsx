@@ -237,7 +237,10 @@ export function Sessions() {
 
   const handleStart = async (id: string) => {
     const session = sessions.find(s => s.id === id);
-    if (session && ['initializing', 'qr_ready'].includes(session.status)) {
+    // Only skip POST /start when a live engine is already producing a QR. After a container
+    // restart the DB can still say qr_ready while Chrome is gone — opening the modal then
+    // spins forever because nothing is generating a code.
+    if (session && session.engineLoaded && ['initializing', 'qr_ready'].includes(session.status)) {
       handleShowQR(id);
       return;
     }

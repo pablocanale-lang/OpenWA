@@ -42,7 +42,7 @@ export type KamproStockMovement = {
   id: string;
   productId: string;
   quantity: number;
-  reason: 'RECEPCION' | 'AJUSTE' | 'VENTA' | 'CANCELACION_PEDIDO' | 'DEVOLUCION';
+  reason: 'RECEPCION' | 'AJUSTE' | 'RESERVA' | 'VENTA' | 'CANCELACION_PEDIDO' | 'CANCELACION_COMPRA' | 'DEVOLUCION';
   notes: string | null;
   createdAt: string;
   orderId?: string | null;
@@ -56,6 +56,8 @@ export type KamproProduct = {
   unitPricePyg: number | null;
   unitCostPyg: number | null;
   stockQty: number;
+  reservedQty?: number;
+  availableQty?: number;
   status: string;
 };
 
@@ -69,6 +71,77 @@ export type KamproSupplier = {
 };
 
 export type KamproForwarder = { id: string; name: string; contact: string | null; country: string | null };
+
+export type PurchaseOrderStatus = 'BORRADOR' | 'CONFIRMADA' | 'CERRADA' | 'CANCELADA';
+
+export type KamproPurchaseOrderInvoice = {
+  id: string;
+  invoiceNumber: string;
+  ruc: string;
+  legalName: string;
+  issuedAt: string;
+  amount: string;
+  purchaseOrder?: {
+    id: string;
+    status: PurchaseOrderStatus;
+    orderedAt: string;
+    supplierName: string;
+    productName: string;
+  };
+};
+
+export type KamproPurchaseOrderLine = {
+  productId: string;
+  quantity: number;
+  unitPrice: string;
+  product?: { id: string; sku: string; name: string };
+};
+
+export type KamproPurchaseOrder = {
+  id: string;
+  status: PurchaseOrderStatus;
+  orderedAt: string;
+  origin: string;
+  destination: string;
+  quantity: number;
+  unitPrice: string;
+  freight: string;
+  otherCharges: string;
+  fxRateToPyg: string | null;
+  chinaPyg: string | null;
+  spentPyg: string | null;
+  comments: string | null;
+  currency: string;
+  paymentReceipt: string | null;
+  confirmedAt: string | null;
+  receivedAt: string | null;
+  customsCost: string | null;
+  dispatchCost: string | null;
+  closedAt: string | null;
+  cancelledAt: string | null;
+  forwarderId: string;
+  supplierId: string;
+  productId: string;
+  productName?: string;
+  merchandiseTotal: string;
+  openTotal: string;
+  landedTotal: string;
+  items?: KamproPurchaseOrderLine[];
+  forwarder?: { id: string; name: string };
+  supplier?: { id: string; name: string };
+  product?: { id: string; sku: string; name: string };
+  invoices: KamproPurchaseOrderInvoice[];
+};
+
+export type KamproPurchaseOrderSummary = {
+  draft: number;
+  open: number;
+  closed: number;
+  cancelled: number;
+  total: number;
+  quantity: number;
+  spent: string;
+};
 
 export type KamproPurchase = {
   id: string;
@@ -186,6 +259,7 @@ export type KamproOrder = {
   recipientName: string;
   invoiceName: string;
   ruc: string;
+  invoiceSettlement?: InvoiceSettlement;
   status: OrderStatus;
   sessionId: string | null;
   chatId: string | null;
@@ -214,6 +288,9 @@ export type KamproOrder = {
   salesNotify?: { ok: true; groupId: string } | { ok: false; error: string };
 };
 
+export type InvoiceSettlement = 'CONTADO' | 'CREDITO';
+export type TreasuryAccount = 'CAJA' | 'BANCO';
+
 export type CreateOrderLinePayload = {
   sku: string;
   quantity: number;
@@ -229,6 +306,7 @@ export type CreateOrderPayload = {
   recipientName: string;
   invoiceName: string;
   ruc: string;
+  invoiceSettlement?: InvoiceSettlement;
   sessionId?: string;
   chatId?: string;
   locationLat?: number;
@@ -246,6 +324,7 @@ export type UpdateOrderPayload = {
   recipientName?: string;
   invoiceName?: string;
   ruc?: string;
+  invoiceSettlement?: InvoiceSettlement;
   locationLat?: number | null;
   locationLng?: number | null;
   locationText?: string | null;
@@ -263,3 +342,146 @@ export function actionNeedsPayment(order: KamproOrder, action: OrderAction): boo
 export function isOpenOrder(status: OrderStatus): boolean {
   return status !== 'CERRADO' && status !== 'CANCELADO' && status !== 'DEVUELTO';
 }
+
+export type BusinessPeriod = 'day' | 'week' | 'month' | 'year';
+
+export type BusinessReport = {
+  period: BusinessPeriod;
+  timezone: string;
+  range: { fromKey: string; toKey: string };
+  previousRange: { fromKey: string; toKey: string };
+  revenuePyg: number;
+  previousRevenuePyg: number;
+  revenueDeltaPct: number | null;
+  paidOrderCount: number;
+  previousPaidOrderCount: number;
+  unitsSold: number;
+  previousUnitsSold: number;
+  avgTicketPyg: number | null;
+  byProduct: Array<{ sku: string; name: string; units: number; revenuePyg: number }>;
+  byZone: {
+    ASUNCION: { revenuePyg: number; payments: number };
+    INTERIOR: { revenuePyg: number; payments: number };
+  };
+  byMethod: { EFECTIVO: number; TRANSFERENCIA: number };
+  customers: { new: number; returning: number; newRevenuePyg: number; returningRevenuePyg: number };
+  series: Array<{ date: string; revenuePyg: number; payments: number }>;
+  pipeline: Record<string, number>;
+  invoicesIssued: number;
+  pendingCollection: { count: number; amountPyg: number; deliveryPyg: number; encomiendaPyg: number };
+  stock: Array<{ sku: string; name: string; stockQty: number; unitPricePyg: number | null }>;
+  importSpend: { pyg: number; missingFx: boolean };
+  followUpChats: number;
+  targets: { dayPyg: number | null; weekPyg: number | null; monthPyg: number | null; yearPyg: number | null };
+  targetPyg: number | null;
+  goalPct: number | null;
+  goalRemainingPyg: number | null;
+};
+
+export function fetchBusinessReport(period: BusinessPeriod) {
+  return kamproFetch<BusinessReport>(`/reports/business?period=${period}`);
+}
+
+export function saveSalesTargets(body: Partial<BusinessReport['targets']>) {
+  return kamproFetch<BusinessReport['targets']>('/reports/targets', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
+export type KamproAccount = {
+  id: string;
+  code: string;
+  name: string;
+  type: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'INCOME' | 'COST' | 'EXPENSE';
+  role: string | null;
+  parentId: string | null;
+  postable: boolean;
+  system: boolean;
+  parent?: { id: string; code: string; name: string } | null;
+};
+
+export type KamproJournalLine = {
+  id: string;
+  accountId: string;
+  debit: number;
+  credit: number;
+  memo: string | null;
+  account: { code: string; name: string };
+};
+
+export type KamproJournalEntry = {
+  id: string;
+  number: number;
+  numberLabel: string;
+  datedAt: string;
+  memo: string;
+  sourceType: string;
+  sourceId: string;
+  event: string;
+  lines: KamproJournalLine[];
+};
+
+export type KamproExpense = {
+  id: string;
+  kind: 'GENERAL' | 'SALARIO' | 'PUBLICIDAD' | 'OTRO';
+  datedAt: string;
+  description: string;
+  amountGrossPyg: number;
+  ivaIncluded: boolean;
+  treasury: TreasuryAccount;
+  vendor: string | null;
+  reference: string | null;
+  account: { code: string; name: string };
+};
+
+export type KamproStatements = {
+  from: string;
+  to: string;
+  incomeStatement: {
+    income: Array<{ code: string; name: string; balance: number }>;
+    costs: Array<{ code: string; name: string; balance: number }>;
+    expenses: Array<{ code: string; name: string; balance: number }>;
+    revenue: number;
+    costTotal: number;
+    expenseTotal: number;
+    grossMargin: number;
+    netIncome: number;
+  };
+  balanceSheet: {
+    assets: Array<{ code: string; name: string; balance: number }>;
+    liabilities: Array<{ code: string; name: string; balance: number }>;
+    equity: Array<{ code: string; name: string; balance: number }>;
+    assetTotal: number;
+    liabilityTotal: number;
+    equityTotal: number;
+  };
+  cashFlow: {
+    operating: number;
+    investing: number;
+    financing: number;
+    net: number;
+    lines: Array<{
+      datedAt: string;
+      numberLabel: string;
+      memo: string;
+      account: string;
+      debit: number;
+      credit: number;
+      net: number;
+      class: string;
+    }>;
+  };
+};
+
+export type KamproLedger = {
+  account: KamproAccount;
+  balance: number;
+  rows: Array<{
+    debit: number;
+    credit: number;
+    balance: number;
+    memo: string | null;
+    entry: { datedAt: string; numberLabel: string; memo: string };
+  }>;
+};

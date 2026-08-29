@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, PurchaseOrderStatus, StockMovementReason } from '@prisma/client';
 
 const prisma = new PrismaClient();
 const demo = process.argv.includes('--demo');
@@ -32,12 +32,13 @@ async function main() {
   }
 
   if (!demo) {
-    console.log('Seed catálogo OK (3 SKUs, stock 0). Usá --demo para un lote de importación de ejemplo.');
+    console.log('Seed catálogo OK (3 SKUs, stock 0). Usá --demo para órdenes de compra de ejemplo.');
     return;
   }
 
   const jer50 = await prisma.product.findUniqueOrThrow({ where: { sku: 'JER-50ML' } });
   const jer2 = await prisma.product.findUniqueOrThrow({ where: { sku: 'JER-2ML' } });
+  const jer5 = await prisma.product.findUniqueOrThrow({ where: { sku: 'JER-5ML' } });
 
   const supplier = await prisma.supplier.upsert({
     where: { id: 'demo-supplier' },
@@ -50,7 +51,7 @@ async function main() {
       alibabaUrl: 'https://www.alibaba.com',
       notes: 'Registro de ejemplo para probar el módulo. No es un proveedor real.',
       products: {
-        create: [{ productId: jer50.id }, { productId: jer2.id }],
+        create: [{ productId: jer50.id }, { productId: jer2.id }, { productId: jer5.id }],
       },
     },
   });
@@ -66,83 +67,126 @@ async function main() {
     },
   });
 
-  await prisma.receptionIncident.deleteMany();
-  await prisma.stockMovement.deleteMany();
-  await prisma.reception.deleteMany();
-  await prisma.importCost.deleteMany();
-  await prisma.purchase.deleteMany({ where: { supplierId: supplier.id } });
-  await prisma.shipment.deleteMany({ where: { forwarderId: forwarder.id } });
-  await prisma.product.updateMany({ data: { stockQty: 0, unitCostPyg: null } });
+  await prisma.lotConsumption.deleteMany({});
+  await prisma.inventoryLot.deleteMany({
+    where: { purchaseOrder: { supplierId: supplier.id } },
+  });
+  await prisma.purchaseOrderInvoice.deleteMany({
+    where: { purchaseOrder: { supplierId: supplier.id } },
+  });
+  await prisma.stockMovement.deleteMany({
+    where: { purchaseOrder: { supplierId: supplier.id } },
+  });
+  await prisma.purchaseOrder.deleteMany({ where: { supplierId: supplier.id } });
+  await prisma.product.updateMany({ data: { stockQty: 0, reservedQty: 0, unitCostPyg: null } });
 
-  const shipment = await prisma.shipment.create({
+  await prisma.purchaseOrder.create({
     data: {
+      status: PurchaseOrderStatus.BORRADOR,
+      orderedAt: new Date('2026-08-20'),
       forwarderId: forwarder.id,
-      reference: 'DEMO-FWD-001',
-      departedAt: new Date('2026-07-01'),
-      etaAt: new Date('2026-08-10'),
-      arrivedAt: new Date('2026-08-12'),
-      status: 'LLEGADO',
-    },
-  });
-
-  const p50 = await prisma.purchase.create({
-    data: {
-      purchasedAt: new Date('2026-06-20'),
-      productId: jer50.id,
       supplierId: supplier.id,
-      shipmentId: shipment.id,
-      quantity: 100,
-      unitPrice: 2.4,
-      total: 240,
-      currency: 'USD',
+      origin: 'Yiwu, China',
+      destination: 'Asunción, Paraguay',
+      productId: jer5.id,
+      quantity: 50,
+      unitPrice: 1.1,
+      freight: 30,
+      otherCharges: 0,
       fxRateToPyg: 7500,
+      comments: 'Borrador: todavía no se pagó al proveedor.',
+      lines: {
+        create: [{ productId: jer5.id, quantity: 50, unitPrice: 1.1, sortOrder: 0 }],
+      },
     },
   });
 
-  await prisma.purchase.create({
+  await prisma.purchaseOrder.create({
     data: {
-      purchasedAt: new Date('2026-06-20'),
-      productId: jer2.id,
+      status: PurchaseOrderStatus.CONFIRMADA,
+      orderedAt: new Date('2026-07-15'),
+      forwarderId: forwarder.id,
       supplierId: supplier.id,
-      shipmentId: shipment.id,
+      origin: 'Yiwu, China',
+      destination: 'Asunción, Paraguay',
+      productId: jer2.id,
       quantity: 200,
       unitPrice: 0.9,
-      total: 180,
-      currency: 'USD',
+      freight: 80,
+      otherCharges: 12,
       fxRateToPyg: 7500,
+      comments: 'Pago hecho; en tránsito.',
+      paymentReceipt: 'TRX-DEMO-7788',
+      confirmedAt: new Date('2026-07-16'),
+      lines: {
+        create: [{ productId: jer2.id, quantity: 200, unitPrice: 0.9, sortOrder: 0 }],
+      },
     },
   });
 
-  await prisma.importCost.createMany({
-    data: [
-      {
-        shipmentId: shipment.id,
-        type: 'LOGISTICA',
-        description: 'Flete forwarder',
-        amount: 120,
-        currency: 'USD',
-        fxRateToPyg: 7500,
+  const closed = await prisma.purchaseOrder.create({
+    data: {
+      status: PurchaseOrderStatus.CERRADA,
+      orderedAt: new Date('2026-06-20'),
+      forwarderId: forwarder.id,
+      supplierId: supplier.id,
+      origin: 'Yiwu, China',
+      destination: 'Asunción, Paraguay',
+      productId: jer50.id,
+      quantity: 100,
+      unitPrice: 2.4,
+      freight: 120,
+      otherCharges: 15,
+      fxRateToPyg: 7500,
+      comments: 'Lote recibido y cerrado.',
+      paymentReceipt: 'TRX-DEMO-4411',
+      confirmedAt: new Date('2026-06-21'),
+      receivedAt: new Date('2026-08-12'),
+      customsCost: 900000,
+      dispatchCost: 350000,
+      closedAt: new Date('2026-08-12'),
+      lines: {
+        create: [{ productId: jer50.id, quantity: 100, unitPrice: 2.4, sortOrder: 0 }],
       },
-      {
-        shipmentId: shipment.id,
-        type: 'ADUANA',
-        description: 'Tasas aduaneras',
-        amount: 900000,
-        currency: 'PYG',
+      invoices: {
+        create: [
+          {
+            invoiceNumber: '001-001-0000101',
+            ruc: '80011122-3',
+            legalName: 'Despachante Demo SA',
+            issuedAt: new Date('2026-08-11'),
+            amount: 1250000,
+          },
+        ],
       },
-      {
-        shipmentId: shipment.id,
-        purchaseId: p50.id,
-        type: 'OTRO',
-        description: 'Inspección extra 50 ml',
-        amount: 15,
-        currency: 'USD',
-        fxRateToPyg: 7500,
-      },
-    ],
+    },
   });
 
-  console.log('Seed demo OK: proveedor + envío + costos. Registrá la recepción desde la UI para impactar stock.');
+  await prisma.product.update({
+    where: { id: jer50.id },
+    data: { stockQty: { increment: 100 } },
+  });
+  await prisma.stockMovement.create({
+    data: {
+      productId: jer50.id,
+      quantity: 100,
+      reason: StockMovementReason.RECEPCION,
+      purchaseOrderId: closed.id,
+      notes: 'Seed demo: OC cerrada',
+    },
+  });
+  await prisma.inventoryLot.create({
+    data: {
+      productId: jer50.id,
+      purchaseOrderId: closed.id,
+      receivedAt: new Date('2026-08-12'),
+      qtyOriginal: 100,
+      qtyRemaining: 100,
+      unitCostPyg: 39489,
+    },
+  });
+
+  console.log('Seed demo OK: 1 borrador, 1 confirmada, 1 cerrada (stock 50 ml +100).');
 }
 
 main()

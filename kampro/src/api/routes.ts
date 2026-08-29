@@ -1,12 +1,16 @@
 import type { FastifyInstance } from 'fastify';
 import {
+  AccountType,
+  ExpenseKind,
   ImportCostType,
+  InvoiceSettlement,
   OrderStatus,
   OrderZone,
   PaymentMethod,
   ProductStatus,
   ReceptionIncidentType,
   ShipmentStatus,
+  TreasuryAccount,
 } from '@prisma/client';
 import { z } from 'zod';
 import { sendError } from './auth.js';
@@ -14,12 +18,17 @@ import * as products from '../services/products.service.js';
 import * as suppliers from '../services/suppliers.service.js';
 import * as forwarders from '../services/forwarders.service.js';
 import * as purchases from '../services/purchases.service.js';
+import * as purchaseOrders from '../services/purchase-orders.service.js';
 import * as shipments from '../services/shipments.service.js';
 import * as costs from '../services/costs.service.js';
 import * as receptions from '../services/receptions.service.js';
 import * as reports from '../services/reports.service.js';
+import * as businessReport from '../services/business-report.service.js';
 import * as orders from '../services/orders.service.js';
 import * as followUps from '../services/follow-ups.service.js';
+import * as accounts from '../services/accounts.service.js';
+import * as journal from '../services/journal.service.js';
+import * as expenses from '../services/expenses.service.js';
 import type { OrderAction } from '../domain/order-transitions.js';
 
 const idParam = z.object({ id: z.string().min(1) });
@@ -318,6 +327,181 @@ export async function apiRoutes(app: FastifyInstance) {
     }
   });
 
+  const moneyField = z.string().or(z.number().transform(String));
+
+  const poLine = z.object({
+    productId: z.string().min(1),
+    quantity: z.number().int().positive(),
+    unitPrice: moneyField,
+  });
+
+  app.get('/purchase-orders', async (_req, reply) => {
+    try {
+      return await purchaseOrders.listPurchaseOrders();
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.get('/purchase-orders/summary', async (_req, reply) => {
+    try {
+      return await purchaseOrders.purchaseOrderSummary();
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.get('/purchase-orders/invoices', async (_req, reply) => {
+    try {
+      return await purchaseOrders.listPurchaseOrderInvoices();
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.get('/purchase-orders/receptions', async (_req, reply) => {
+    try {
+      return await purchaseOrders.listClosedReceptions();
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.post('/purchase-orders', async (req, reply) => {
+    try {
+      const body = z
+        .object({
+          orderedAt: z.coerce.date(),
+          forwarderId: z.string().min(1),
+          supplierId: z.string().min(1),
+          origin: z.string().min(1),
+          destination: z.string().min(1),
+          productId: z.string().min(1).optional(),
+          quantity: z.number().int().positive().optional(),
+          unitPrice: moneyField.optional(),
+          items: z.array(poLine).min(1).optional(),
+          freight: moneyField.optional(),
+          otherCharges: moneyField.optional(),
+          fxRateToPyg: moneyField.optional(),
+          currency: z.string().optional(),
+          comments: z.string().optional(),
+        })
+        .refine((row) => (row.items && row.items.length > 0) || (row.productId && row.quantity && row.unitPrice), {
+          message: 'La orden de compra necesita al menos un producto',
+        })
+        .parse(req.body);
+      return await purchaseOrders.createPurchaseOrder(body);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.get('/purchase-orders/:id', async (req, reply) => {
+    try {
+      const { id } = idParam.parse(req.params);
+      return await purchaseOrders.getPurchaseOrder(id);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.patch('/purchase-orders/:id', async (req, reply) => {
+    try {
+      const { id } = idParam.parse(req.params);
+      const body = z
+        .object({
+          orderedAt: z.coerce.date().optional(),
+          forwarderId: z.string().min(1).optional(),
+          supplierId: z.string().min(1).optional(),
+          origin: z.string().min(1).optional(),
+          destination: z.string().min(1).optional(),
+          productId: z.string().min(1).optional(),
+          quantity: z.number().int().positive().optional(),
+          unitPrice: moneyField.optional(),
+          items: z.array(poLine).min(1).optional(),
+          freight: moneyField.optional(),
+          otherCharges: moneyField.optional(),
+          fxRateToPyg: moneyField.nullable().optional(),
+          currency: z.string().optional(),
+          comments: z.string().nullable().optional(),
+        })
+        .parse(req.body);
+      return await purchaseOrders.updatePurchaseOrder(id, body);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.post('/purchase-orders/:id/confirm', async (req, reply) => {
+    try {
+      const { id } = idParam.parse(req.params);
+      const body = z
+        .object({
+          paymentReceipt: z.string().min(1),
+          treasury: z.nativeEnum(TreasuryAccount).optional(),
+          fxRateToPyg: z.union([z.string(), z.number()]).transform(String).optional(),
+        })
+        .parse(req.body);
+      return await purchaseOrders.confirmPurchaseOrder(id, body);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.post('/purchase-orders/:id/close', async (req, reply) => {
+    try {
+      const { id } = idParam.parse(req.params);
+      const body = z
+        .object({
+          receivedAt: z.coerce.date(),
+          customsCost: moneyField,
+          dispatchCost: moneyField,
+          invoices: z
+            .array(
+              z.object({
+                invoiceNumber: z.string().optional().default(''),
+                ruc: z.string().optional().default(''),
+                legalName: z.string().optional().default(''),
+                issuedAt: z.coerce.date(),
+                amount: z.union([z.string(), z.number()]).transform(String).optional().default(''),
+              }),
+            )
+            .min(1),
+          localTreasury: z.nativeEnum(TreasuryAccount).optional(),
+        })
+        .parse(req.body);
+      return await purchaseOrders.closePurchaseOrder(id, body);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.post('/purchase-orders/:id/cancel', async (req, reply) => {
+    try {
+      const { id } = idParam.parse(req.params);
+      const body = z
+        .object({
+          amountPyg: z.number().int().positive().optional(),
+          treasury: z.nativeEnum(TreasuryAccount).optional(),
+          paidAt: z.coerce.date().optional(),
+          reference: z.string().optional(),
+        })
+        .parse(req.body ?? {});
+      const refund =
+        body.amountPyg && body.treasury && body.paidAt
+          ? {
+              amountPyg: body.amountPyg,
+              treasury: body.treasury,
+              paidAt: body.paidAt,
+              reference: body.reference,
+            }
+          : undefined;
+      return await purchaseOrders.cancelPurchaseOrder(id, refund);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
   app.get('/shipments', async (_req, reply) => {
     try {
       return await shipments.listShipments();
@@ -494,6 +678,32 @@ export async function apiRoutes(app: FastifyInstance) {
     }
   });
 
+  app.get('/reports/business', async (req, reply) => {
+    try {
+      const query = z.object({ period: z.string().optional() }).parse(req.query);
+      return await businessReport.businessReport(businessReport.parsePeriod(query.period));
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.put('/reports/targets', async (req, reply) => {
+    try {
+      const pyg = z.number().int().positive().nullable().optional();
+      const body = z
+        .object({
+          dayPyg: pyg,
+          weekPyg: pyg,
+          monthPyg: pyg,
+          yearPyg: pyg,
+        })
+        .parse(req.body ?? {});
+      return await businessReport.saveSalesTargets(body);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
   const paymentBody = z.object({
     amount: z.number().int().positive(),
     method: z.nativeEnum(PaymentMethod),
@@ -546,6 +756,7 @@ export async function apiRoutes(app: FastifyInstance) {
           recipientName: z.string().min(1),
           invoiceName: z.string().min(1),
           ruc: z.string().min(1),
+          invoiceSettlement: z.nativeEnum(InvoiceSettlement).optional(),
           sessionId: z.string().optional(),
           chatId: z.string().optional(),
           locationLat: z.number().optional(),
@@ -580,6 +791,7 @@ export async function apiRoutes(app: FastifyInstance) {
           recipientName: z.string().min(1).optional(),
           invoiceName: z.string().min(1).optional(),
           ruc: z.string().min(1).optional(),
+          invoiceSettlement: z.nativeEnum(InvoiceSettlement).optional(),
           locationLat: z.number().nullable().optional(),
           locationLng: z.number().nullable().optional(),
           locationText: z.string().nullable().optional(),
@@ -636,6 +848,132 @@ export async function apiRoutes(app: FastifyInstance) {
       const { id } = idParam.parse(req.params);
       const body = z.object({ status: z.nativeEnum(OrderStatus) }).parse(req.body);
       return await orders.setOrderStatus(id, body.status);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.get('/accounting/accounts', async (_req, reply) => {
+    try {
+      return await accounts.listAccounts();
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.post('/accounting/accounts', async (req, reply) => {
+    try {
+      const body = z
+        .object({
+          name: z.string().min(1),
+          type: z.nativeEnum(AccountType),
+          parentId: z.string().min(1).nullable().optional(),
+          postable: z.boolean().optional(),
+        })
+        .parse(req.body);
+      return await accounts.createAccount(body);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.get('/accounting/entries', async (req, reply) => {
+    try {
+      const query = z
+        .object({
+          from: z.coerce.date().optional(),
+          to: z.coerce.date().optional(),
+          sourceId: z.string().optional(),
+          accountId: z.string().optional(),
+        })
+        .parse(req.query);
+      return await journal.listEntries(query);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.get('/accounting/entries/:id', async (req, reply) => {
+    try {
+      const { id } = idParam.parse(req.params);
+      return await journal.getEntry(id);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.get('/accounting/ledger/:accountId', async (req, reply) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string().min(1) }).parse(req.params);
+      const query = z.object({ from: z.coerce.date().optional(), to: z.coerce.date().optional() }).parse(req.query);
+      return await journal.ledger(accountId, query.from, query.to);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.get('/accounting/statements', async (req, reply) => {
+    try {
+      const query = z
+        .object({
+          from: z.coerce.date(),
+          to: z.coerce.date(),
+        })
+        .parse(req.query);
+      return await journal.financialStatements(query.from, query.to);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.post('/accounting/manual', async (req, reply) => {
+    try {
+      const body = z
+        .object({
+          datedAt: z.coerce.date(),
+          memo: z.string().min(1),
+          lines: z
+            .array(
+              z.object({
+                accountId: z.string().min(1),
+                debit: z.number().int().nonnegative(),
+                credit: z.number().int().nonnegative(),
+                memo: z.string().optional(),
+              }),
+            )
+            .min(2),
+        })
+        .parse(req.body);
+      return await journal.postManual(body.datedAt, body.memo, body.lines);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.get('/accounting/expenses', async (_req, reply) => {
+    try {
+      return await expenses.listExpenses();
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.post('/accounting/expenses', async (req, reply) => {
+    try {
+      const body = z
+        .object({
+          kind: z.nativeEnum(ExpenseKind),
+          datedAt: z.coerce.date(),
+          description: z.string().min(1),
+          amountGrossPyg: z.number().int().positive(),
+          ivaIncluded: z.boolean().optional(),
+          treasury: z.nativeEnum(TreasuryAccount),
+          accountId: z.string().min(1).optional(),
+          vendor: z.string().nullable().optional(),
+          reference: z.string().nullable().optional(),
+        })
+        .parse(req.body);
+      return await expenses.createExpense(body);
     } catch (err) {
       return sendError(reply, err);
     }

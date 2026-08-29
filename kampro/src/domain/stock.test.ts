@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { netByProduct, qtyNeededBySku, saleDelta } from './stock.js';
+import { availableQty, netByProduct, qtyNeededBySku, reservationDelta, saleDelta } from './stock.js';
 
 describe('stock math', () => {
   it('agrupa cantidades por SKU', () => {
@@ -31,5 +31,13 @@ describe('stock math', () => {
       { productId: 'p1', quantity: 2 },
     ]);
     assert.equal(net.get('p1'), 0);
+  });
+});
+
+describe('reserva vs disponible', () => {
+  it('disponible es físico menos reservado', () => {
+    assert.equal(availableQty(10, 3), 7);
+    assert.equal(reservationDelta(0, 2), 2);
+    assert.equal(reservationDelta(2, 1), -1);
   });
 });
