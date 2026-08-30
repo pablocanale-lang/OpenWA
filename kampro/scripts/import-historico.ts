@@ -113,7 +113,7 @@ const SALES: SaleRow[] = [
   },
   {
     invoiceNumber: '001-001-0000005',
-    issuedAt: '2026-08-04',
+    issuedAt: '2026-07-31',
     ruc: '700484-3',
     name: 'Joaquin Clavel',
     quantity: 2,

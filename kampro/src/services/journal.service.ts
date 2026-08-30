@@ -167,30 +167,47 @@ async function documentBySource(entries: Array<{ sourceType: JournalSource; sour
   const poIds = ids(JournalSource.PURCHASE_ORDER);
   const [orders, payments, expenses, purchaseOrders] = await Promise.all([
     orderIds.length
-      ? prisma.order.findMany({ where: { id: { in: orderIds } }, select: { id: true, invoiceNumber: true } })
+      ? prisma.order.findMany({
+          where: { id: { in: orderIds } },
+          select: { id: true, numberLabel: true, invoiceNumber: true },
+        })
       : [],
     paymentIds.length
       ? prisma.payment.findMany({
           where: { id: { in: paymentIds } },
-          select: { id: true, reference: true, order: { select: { invoiceNumber: true } } },
+          select: {
+            id: true,
+            reference: true,
+            order: { select: { numberLabel: true, invoiceNumber: true } },
+          },
         })
       : [],
     expenseIds.length
-      ? prisma.expense.findMany({ where: { id: { in: expenseIds } }, select: { id: true, reference: true } })
+      ? prisma.expense.findMany({
+          where: { id: { in: expenseIds } },
+          select: { id: true, numberLabel: true, reference: true },
+        })
       : [],
     poIds.length
       ? prisma.purchaseOrder.findMany({
           where: { id: { in: poIds } },
-          select: { id: true, invoices: { select: { invoiceNumber: true }, take: 1, orderBy: { issuedAt: 'desc' } } },
+          select: {
+            id: true,
+            numberLabel: true,
+            invoices: { select: { invoiceNumber: true }, take: 1, orderBy: { issuedAt: 'desc' } },
+          },
         })
       : [],
   ]);
-  const orderMap = new Map(orders.map((row) => [row.id, row.invoiceNumber]));
+  const join = (...parts: Array<string | null | undefined>) => parts.filter(Boolean).join(' · ') || null;
+  const orderMap = new Map(orders.map((row) => [row.id, join(row.numberLabel, row.invoiceNumber)]));
   const paymentMap = new Map(
-    payments.map((row) => [row.id, row.reference || row.order.invoiceNumber]),
+    payments.map((row) => [row.id, join(row.order.numberLabel, row.reference || row.order.invoiceNumber)]),
   );
-  const expenseMap = new Map(expenses.map((row) => [row.id, row.reference]));
-  const poMap = new Map(purchaseOrders.map((row) => [row.id, row.invoices[0]?.invoiceNumber ?? null]));
+  const expenseMap = new Map(expenses.map((row) => [row.id, join(row.numberLabel, row.reference)]));
+  const poMap = new Map(
+    purchaseOrders.map((row) => [row.id, join(row.numberLabel, row.invoices[0]?.invoiceNumber)]),
+  );
   return (sourceType: JournalSource, sourceId: string): string | null => {
     if (sourceType === JournalSource.ORDER) return orderMap.get(sourceId) ?? null;
     if (sourceType === JournalSource.PAYMENT) return paymentMap.get(sourceId) ?? null;
@@ -314,14 +331,14 @@ function withResultado(equity: StatementAccount[], netIncome: number): Statement
   ];
 }
 
-export async function financialStatements(from: Date, to: Date) {
-  const period = await trialBalances(from, to);
-  const allTime = await trialBalances(undefined, to);
-  const prior = await trialBalances(undefined, new Date(from.getTime() - 1));
-  const income = period.filter((a) => a.type === 'INCOME');
-  const costs = period.filter((a) => a.type === 'COST');
-  const expenses = period.filter((a) => a.type === 'EXPENSE');
-  const taxes = period.filter((a) => a.role === 'IVA_DEBITO' || a.role === 'IVA_CREDITO');
+export async function financialStatements(from?: Date, to?: Date) {
+  const end = to ?? new Date();
+  const allTime = await trialBalances(undefined, end);
+  const prior: StatementAccount[] = [];
+  const income = allTime.filter((a) => a.type === 'INCOME');
+  const costs = allTime.filter((a) => a.type === 'COST');
+  const expenses = allTime.filter((a) => a.type === 'EXPENSE');
+  const taxes = allTime.filter((a) => a.role === 'IVA_DEBITO' || a.role === 'IVA_CREDITO');
   const revenue = income.reduce((s, a) => s + a.balance, 0);
   const costTotal = costs.reduce((s, a) => s + a.balance, 0);
   const expenseTotal = expenses.reduce((s, a) => s + a.balance, 0);
@@ -343,7 +360,7 @@ export async function financialStatements(from: Date, to: Date) {
   const cashLines = await prisma.journalLine.findMany({
     where: {
       accountId: { in: [...treasuryIds] },
-      entry: { datedAt: { gte: from, lte: to } },
+      entry: { datedAt: { lte: end } },
     },
     include: { entry: true, account: true },
     orderBy: [{ entry: { number: 'desc' } }, { sortOrder: 'asc' }],
@@ -365,8 +382,9 @@ export async function financialStatements(from: Date, to: Date) {
   const net = cashFlow.operating + cashFlow.investing + cashFlow.financing;
 
   return {
-    from: from.toISOString(),
-    to: to.toISOString(),
+    from: from?.toISOString() ?? null,
+    to: end.toISOString(),
+    accumulated: true,
     incomeStatement: {
       income,
       costs,

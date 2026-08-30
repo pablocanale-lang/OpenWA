@@ -28,18 +28,31 @@ import {
 import { prisma } from '../db.js';
 import { splitIva11 } from '../domain/iva.js';
 import { badRequest, notFound } from '../http-error.js';
+import { operationMemo } from '../domain/operation-number.js';
 import { findActiveEntry, postEntry, reverseActive, reverseEntry, rewriteActiveEntry } from './journal.service.js';
 import { addLot, consumeForOrder, removeLotsForPurchaseOrder, restoreForOrder } from './fifo.service.js';
 import { applyOrderReservation, restoreOrderSale } from './stock.service.js';
 
 type Tx = Prisma.TransactionClient;
 
-function memo(prefix: string, id: string) {
-  return `${prefix} ${id.slice(-6)}`;
+async function orderRef(tx: Tx, orderId: string) {
+  const row = await tx.order.findUnique({
+    where: { id: orderId },
+    select: { numberLabel: true, invoiceNumber: true },
+  });
+  return {
+    ref: row?.numberLabel || orderId.slice(-6),
+    invoiceNumber: row?.invoiceNumber ?? null,
+  };
 }
 
-export function saleCloseMemo(orderId: string, invoiceNumber?: string | null) {
-  return invoiceNumber ? `Venta factura ${invoiceNumber}` : `Venta ${orderId.slice(-6)}`;
+async function poRef(tx: Tx, id: string) {
+  const row = await tx.purchaseOrder.findUnique({ where: { id }, select: { numberLabel: true } });
+  return row?.numberLabel || id.slice(-6);
+}
+
+export function saleCloseMemo(ref: string, invoiceNumber?: string | null) {
+  return operationMemo('ORDER', 'CLOSE', ref, invoiceNumber);
 }
 
 export async function postOrderPayment(
@@ -55,13 +68,15 @@ export async function postOrderPayment(
   },
 ) {
   const treasury = treasuryFromPaymentMethod(input.method);
+  const { ref } = await orderRef(tx, input.orderId);
+  const text = operationMemo('PAYMENT', 'PAY', ref);
   const closedCredit = input.orderClosed && input.settlement === InvoiceSettlement.CREDITO;
   const lines = closedCredit
-    ? linesCreditCollection(input.amount, treasury, memo('Cobro pedido', input.orderId))
-    : linesCustomerPayment(input.amount, treasury, memo('Cobro pedido', input.orderId));
+    ? linesCreditCollection(input.amount, treasury, text)
+    : linesCustomerPayment(input.amount, treasury, text);
   return postEntry(tx, {
     datedAt: input.paidAt,
-    memo: memo('Cobro pedido', input.orderId),
+    memo: text,
     sourceType: JournalSource.PAYMENT,
     sourceId: input.paymentId,
     event: 'PAY',
@@ -74,9 +89,10 @@ export async function postIvaRetention(
   input: { orderId: string; amount: number; datedAt: Date; certificate?: string | null },
 ) {
   if (input.amount < 1) return null;
+  const { ref } = await orderRef(tx, input.orderId);
   const text = input.certificate
     ? `Retención IVA ${input.certificate}`
-    : memo('Retención IVA', input.orderId);
+    : operationMemo('ORDER', 'IVA_RET', ref);
   return postEntry(tx, {
     datedAt: input.datedAt,
     memo: text,
@@ -92,13 +108,15 @@ export async function postOrderRefund(
   input: { orderId: string; paymentId: string; amount: number; method: PaymentMethod; paidAt: Date },
 ) {
   const treasury = treasuryFromPaymentMethod(input.method);
+  const { ref } = await orderRef(tx, input.orderId);
+  const text = operationMemo('PAYMENT', 'REFUND', ref);
   return postEntry(tx, {
     datedAt: input.paidAt,
-    memo: memo('Reembolso pedido', input.orderId),
+    memo: text,
     sourceType: JournalSource.PAYMENT,
     sourceId: input.paymentId,
     event: 'REFUND',
-    lines: linesCustomerRefund(input.amount, treasury, memo('Reembolso pedido', input.orderId)),
+    lines: linesCustomerRefund(input.amount, treasury, text),
   });
 }
 
@@ -114,7 +132,8 @@ export async function postOrderClose(
     lines: Array<{ productId: string; sku: string; quantity: number }>;
   },
 ) {
-  const saleMemo = saleCloseMemo(input.orderId, input.invoiceNumber);
+  const { ref, invoiceNumber } = await orderRef(tx, input.orderId);
+  const saleMemo = saleCloseMemo(ref, input.invoiceNumber ?? invoiceNumber);
   const saleLines = linesSaleRecognition({
     gross: input.gross,
     settlement: input.settlement as Settlement,
@@ -139,13 +158,14 @@ export async function postOrderClose(
     }
   }
   if (totalCogs > 0) {
+    const cogsMemo = operationMemo('ORDER', 'COGS', ref);
     await postEntry(tx, {
       datedAt: input.datedAt,
-      memo: memo('CMV pedido', input.orderId),
+      memo: cogsMemo,
       sourceType: JournalSource.ORDER,
       sourceId: input.orderId,
       event: 'COGS',
-      lines: linesCogs(totalCogs, memo('CMV pedido', input.orderId)),
+      lines: linesCogs(totalCogs, cogsMemo),
     });
   }
 }
@@ -161,13 +181,15 @@ export async function postShippingCost(tx: Tx, orderId: string, amountPyg: numbe
     await reverseActive(tx, JournalSource.ORDER, orderId, 'SHIPPING', datedAt);
     return null;
   }
+  const { ref } = await orderRef(tx, orderId);
+  const text = operationMemo('ORDER', 'SHIPPING', ref);
   return rewriteActiveEntry(tx, {
     datedAt,
-    memo: memo('Flete venta', orderId),
+    memo: text,
     sourceType: JournalSource.ORDER,
     sourceId: orderId,
     event: 'SHIPPING',
-    lines: linesShippingPaid(amountPyg, memo('Flete venta', orderId)),
+    lines: linesShippingPaid(amountPyg, text),
   });
 }
 
@@ -185,7 +207,8 @@ export async function syncClosedOrderJournals(
 ) {
   const existing = await findActiveEntry(tx, JournalSource.ORDER, input.orderId, 'CLOSE');
   const datedAt = existing?.datedAt ?? new Date();
-  const saleMemo = saleCloseMemo(input.orderId, input.invoiceNumber);
+  const { ref } = await orderRef(tx, input.orderId);
+  const saleMemo = saleCloseMemo(ref, input.invoiceNumber);
   await rewriteActiveEntry(tx, {
     datedAt,
     memo: saleMemo,
@@ -211,13 +234,14 @@ export async function syncClosedOrderJournals(
     totalCogs += consumed.totalCostPyg;
   }
   if (totalCogs > 0) {
+    const cogsMemo = operationMemo('ORDER', 'COGS', ref);
     await rewriteActiveEntry(tx, {
       datedAt,
-      memo: memo('CMV pedido', input.orderId),
+      memo: cogsMemo,
       sourceType: JournalSource.ORDER,
       sourceId: input.orderId,
       event: 'COGS',
-      lines: linesCogs(totalCogs, memo('CMV pedido', input.orderId)),
+      lines: linesCogs(totalCogs, cogsMemo),
     });
   } else {
     await reverseActive(tx, JournalSource.ORDER, input.orderId, 'COGS', datedAt);
@@ -260,13 +284,15 @@ export async function postPurchasePay(
 ) {
   const chinaPyg = purchaseChinaPyg(po);
   if (chinaPyg < 1) return null;
+  const ref = await poRef(tx, po.id);
+  const text = operationMemo('PURCHASE_ORDER', 'PAY', ref);
   return postEntry(tx, {
     datedAt: po.confirmedAt,
-    memo: memo('Pago OC', po.id),
+    memo: text,
     sourceType: JournalSource.PURCHASE_ORDER,
     sourceId: po.id,
     event: 'PAY',
-    lines: linesPoPayment(chinaPyg, po.treasury, memo('Pago OC', po.id)),
+    lines: linesPoPayment(chinaPyg, po.treasury, text),
   });
 }
 
@@ -302,9 +328,11 @@ export async function postPurchaseClose(
     ) ?? 0;
   const localGross = Math.round(Number(asString(po.customsCost as never) || 0) + Number(asString(po.dispatchCost as never) || 0));
   const localNet = splitIva11(Math.max(0, localGross)).net;
+  const ref = await poRef(tx, po.id);
+  const text = operationMemo('PURCHASE_ORDER', 'CLOSE', ref);
   await postEntry(tx, {
     datedAt: po.receivedAt,
-    memo: memo('Recepción OC', po.id),
+    memo: text,
     sourceType: JournalSource.PURCHASE_ORDER,
     sourceId: po.id,
     event: 'CLOSE',
@@ -312,7 +340,7 @@ export async function postPurchaseClose(
       chinaPyg,
       localGross: Math.max(0, localGross),
       treasury: po.localTreasury,
-      memo: memo('Recepción OC', po.id),
+      memo: text,
     }),
   });
 
@@ -340,13 +368,15 @@ export async function postPurchaseCancelRefund(
   input: { id: string; amount: number; treasury: Treasury; datedAt: Date; status: PurchaseOrderStatus },
 ) {
   if (input.amount < 1) return null;
+  const ref = await poRef(tx, input.id);
+  const text = operationMemo('PURCHASE_ORDER', 'REFUND', ref);
   return postEntry(tx, {
     datedAt: input.datedAt,
-    memo: memo('Devolución pago OC', input.id),
+    memo: text,
     sourceType: JournalSource.PURCHASE_ORDER,
     sourceId: input.id,
     event: 'REFUND',
-    lines: linesPoRefund(input.amount, input.treasury, memo('Devolución pago OC', input.id)),
+    lines: linesPoRefund(input.amount, input.treasury, text),
   });
 }
 
@@ -371,16 +401,18 @@ export async function syncPurchaseOrderJournals(
   }
   const chinaPyg = purchaseChinaPyg(po);
   const payAt = po.confirmedAt ?? new Date();
+  const ref = await poRef(tx, po.id);
   if (chinaPyg < 1) {
     await reverseActive(tx, JournalSource.PURCHASE_ORDER, po.id, 'PAY', payAt);
   } else {
+    const payMemo = operationMemo('PURCHASE_ORDER', 'PAY', ref);
     await rewriteActiveEntry(tx, {
       datedAt: payAt,
-      memo: memo('Pago OC', po.id),
+      memo: payMemo,
       sourceType: JournalSource.PURCHASE_ORDER,
       sourceId: po.id,
       event: 'PAY',
-      lines: linesPoPayment(chinaPyg, po.treasury, memo('Pago OC', po.id)),
+      lines: linesPoPayment(chinaPyg, po.treasury, payMemo),
     });
   }
 
@@ -393,9 +425,10 @@ export async function syncPurchaseOrderJournals(
   const localNet = splitIva11(Math.max(0, localGross)).net;
   const merch = merchandiseFromLines(purchaseLines(po));
   await removeLotsForPurchaseOrder(tx, po.id);
+  const closeMemo = operationMemo('PURCHASE_ORDER', 'CLOSE', ref);
   await rewriteActiveEntry(tx, {
     datedAt: receivedAt,
-    memo: memo('Recepción OC', po.id),
+    memo: closeMemo,
     sourceType: JournalSource.PURCHASE_ORDER,
     sourceId: po.id,
     event: 'CLOSE',
@@ -403,7 +436,7 @@ export async function syncPurchaseOrderJournals(
       chinaPyg,
       localGross: Math.max(0, localGross),
       treasury: po.localTreasury,
-      memo: memo('Recepción OC', po.id),
+      memo: closeMemo,
     }),
   });
   const landedNet = chinaPyg + localNet;
@@ -453,9 +486,11 @@ export async function postExpenseJournal(
       delete expenseLine.role;
     }
   }
+  const expense = await tx.expense.findUnique({ where: { id: input.id }, select: { numberLabel: true } });
+  const memoText = expense?.numberLabel ? `${expense.numberLabel} · ${input.description}` : input.description;
   const payload = {
     datedAt: input.datedAt,
-    memo: input.description,
+    memo: memoText,
     sourceType: JournalSource.EXPENSE,
     sourceId: input.id,
     event: 'PAY',
@@ -469,16 +504,17 @@ export async function postStockAdjustJournal(
   input: { productId: string; movementId: string; costPyg: number; increase: boolean; datedAt: Date; quantity: number },
 ) {
   if (input.costPyg < 1) return null;
+  const text = `Ajuste stock`;
   return postEntry(tx, {
     datedAt: input.datedAt,
-    memo: memo('Ajuste stock', input.productId),
+    memo: text,
     sourceType: JournalSource.STOCK,
     sourceId: input.movementId,
     event: 'ADJUST',
     lines: linesStockAdjust({
       costPyg: input.costPyg,
       increase: input.increase,
-      memo: memo('Ajuste stock', input.productId),
+      memo: text,
       productId: input.productId,
       quantity: input.quantity,
     }),
@@ -486,20 +522,55 @@ export async function postStockAdjustJournal(
 }
 
 export async function refreshOrderJournalMemos() {
-  const orders = await prisma.order.findMany({
-    where: { invoiceNumber: { not: null } },
-    select: { id: true, invoiceNumber: true },
+  const entries = await prisma.journalEntry.findMany({
+    select: { id: true, memo: true, sourceType: true, sourceId: true, event: true },
   });
-  for (const order of orders) {
-    const nextMemo = saleCloseMemo(order.id, order.invoiceNumber);
-    const entries = await prisma.journalEntry.findMany({
-      where: { sourceType: JournalSource.ORDER, sourceId: order.id, event: 'CLOSE' },
-    });
-    for (const entry of entries) {
-      if (entry.memo === nextMemo) continue;
-      await prisma.journalEntry.update({ where: { id: entry.id }, data: { memo: nextMemo } });
-      await prisma.journalLine.updateMany({ where: { entryId: entry.id }, data: { memo: nextMemo } });
+  const orderIds = [...new Set(entries.filter((e) => e.sourceType === JournalSource.ORDER).map((e) => e.sourceId))];
+  const poIds = [...new Set(entries.filter((e) => e.sourceType === JournalSource.PURCHASE_ORDER).map((e) => e.sourceId))];
+  const expenseIds = [...new Set(entries.filter((e) => e.sourceType === JournalSource.EXPENSE).map((e) => e.sourceId))];
+  const paymentIds = [...new Set(entries.filter((e) => e.sourceType === JournalSource.PAYMENT).map((e) => e.sourceId))];
+
+  const [orders, pos, expenses, payments] = await Promise.all([
+    orderIds.length
+      ? prisma.order.findMany({ where: { id: { in: orderIds } }, select: { id: true, numberLabel: true, invoiceNumber: true } })
+      : [],
+    poIds.length
+      ? prisma.purchaseOrder.findMany({ where: { id: { in: poIds } }, select: { id: true, numberLabel: true } })
+      : [],
+    expenseIds.length
+      ? prisma.expense.findMany({ where: { id: { in: expenseIds } }, select: { id: true, numberLabel: true, description: true } })
+      : [],
+    paymentIds.length
+      ? prisma.payment.findMany({
+          where: { id: { in: paymentIds } },
+          select: { id: true, order: { select: { numberLabel: true } } },
+        })
+      : [],
+  ]);
+  const orderMap = new Map(orders.map((row) => [row.id, row]));
+  const poMap = new Map(pos.map((row) => [row.id, row.numberLabel]));
+  const expenseMap = new Map(expenses.map((row) => [row.id, row]));
+  const paymentMap = new Map(payments.map((row) => [row.id, row.order.numberLabel]));
+
+  for (const entry of entries) {
+    let next = entry.memo;
+    if (entry.sourceType === JournalSource.ORDER) {
+      const order = orderMap.get(entry.sourceId);
+      const ref = order?.numberLabel || entry.sourceId.slice(-6);
+      next = operationMemo('ORDER', entry.event, ref, order?.invoiceNumber);
+    } else if (entry.sourceType === JournalSource.PAYMENT) {
+      const ref = paymentMap.get(entry.sourceId) || entry.sourceId.slice(-6);
+      next = operationMemo('PAYMENT', entry.event, ref);
+    } else if (entry.sourceType === JournalSource.PURCHASE_ORDER) {
+      const ref = poMap.get(entry.sourceId) || entry.sourceId.slice(-6);
+      next = operationMemo('PURCHASE_ORDER', entry.event, ref);
+    } else if (entry.sourceType === JournalSource.EXPENSE) {
+      const expense = expenseMap.get(entry.sourceId);
+      if (expense?.numberLabel) next = `${expense.numberLabel} · ${expense.description}`;
     }
+    if (next === entry.memo) continue;
+    await prisma.journalEntry.update({ where: { id: entry.id }, data: { memo: next } });
+    await prisma.journalLine.updateMany({ where: { entryId: entry.id, memo: entry.memo }, data: { memo: next } });
   }
 }
 

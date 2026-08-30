@@ -932,8 +932,8 @@ export async function apiRoutes(app: FastifyInstance) {
     try {
       const query = z
         .object({
-          from: z.coerce.date(),
-          to: z.coerce.date(),
+          from: z.coerce.date().optional(),
+          to: z.coerce.date().optional(),
         })
         .parse(req.query);
       return await journal.financialStatements(query.from, query.to);

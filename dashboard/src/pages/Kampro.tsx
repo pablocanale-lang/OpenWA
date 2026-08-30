@@ -298,7 +298,7 @@ export function Kampro() {
   const [editLines, setEditLines] = useState<LineDraft[]>([]);
   const [editCurrency, setEditCurrency] = useState('USD');
   const [formNonce, setFormNonce] = useState(0);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [detailTarget, setDetailTarget] = useState<KamproPurchaseOrder | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -599,6 +599,7 @@ export function Kampro() {
 
               <Table
                 headers={[
+                  t('accounting.col.number'),
                   t('kampro.col.orderedAt'),
                   t('kampro.col.supplier'),
                   t('kampro.col.product'),
@@ -608,6 +609,7 @@ export function Kampro() {
                   t('kampro.col.actions'),
                 ]}
                 rows={orders.map(order => [
+                  order.numberLabel || '—',
                   formatDate(order.orderedAt),
                   order.supplier?.name || '',
                   productLabel(order),
@@ -646,13 +648,10 @@ export function Kampro() {
                     }}
                     onToggle={() => {
                       setMenuId(null);
-                      setOpenId(openId === order.id ? null : order.id);
+                      setDetailTarget(order);
                     }}
                   />,
                 ])}
-                details={orders.map(order =>
-                  openId === order.id ? <OrderDetail key={order.id} order={order} t={t} /> : null,
-                )}
               />
             </>
           )}
@@ -956,6 +955,19 @@ export function Kampro() {
       </Modal>
 
       <Modal
+        open={Boolean(detailTarget)}
+        onClose={() => setDetailTarget(null)}
+        title={
+          detailTarget
+            ? `${t('kampro.form.detail')} ${detailTarget.numberLabel || ''}`.trim()
+            : t('kampro.form.detail')
+        }
+        className="po-detail-modal"
+      >
+        {detailTarget ? <OrderDetail order={detailTarget} t={t} /> : null}
+      </Modal>
+
+      <Modal
         open={Boolean(cancelTarget)}
         onClose={() => setCancelTarget(null)}
         title={t('kampro.form.cancelOrder')}
@@ -1173,8 +1185,14 @@ function OrderDetail({
   order: KamproPurchaseOrder;
   t: (key: string) => string;
 }) {
+  const lines = order.items?.length
+    ? order.items
+    : [{ productId: order.productId, quantity: order.quantity, unitPrice: order.unitPrice, product: order.product }];
   return (
     <div className="po-detail">
+      <p>
+        <strong>{t('accounting.col.number')}:</strong> {order.numberLabel || '—'}
+      </p>
       <p>
         <strong>{t('kampro.col.forwarder')}:</strong> {order.forwarder?.name || '—'}
       </p>
@@ -1190,19 +1208,26 @@ function OrderDetail({
           </>
         ) : null}
       </p>
-      {(order.items?.length ? order.items : null) ? (
-        <ul>
-          {order.items!.map((line, index) => (
-            <li key={`${line.productId}-${index}`}>
-              {line.product?.name || line.productId} · {line.quantity} × {formatAmount(line.unitPrice)}
-            </li>
+      <table className="po-detail-lines">
+        <thead>
+          <tr>
+            <th>{t('kampro.col.product')}</th>
+            <th>{t('kampro.col.qty')}</th>
+            <th>{t('kampro.col.unit')}</th>
+            <th>{t('kampro.col.total')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lines.map((line, index) => (
+            <tr key={`${line.productId}-${index}`}>
+              <td>{line.product?.name || line.productId}</td>
+              <td>{line.quantity}</td>
+              <td>{formatAmount(line.unitPrice)}</td>
+              <td>{formatAmount(Number(line.unitPrice) * line.quantity)}</td>
+            </tr>
           ))}
-        </ul>
-      ) : (
-        <p>
-          <strong>{t('kampro.col.unit')}:</strong> {formatAmount(order.unitPrice)} · {t('kampro.col.qty')}: {order.quantity}
-        </p>
-      )}
+        </tbody>
+      </table>
       <p>
         <strong>{t('kampro.col.freight')}:</strong> {formatAmount(order.freight)} · {t('kampro.col.otherCharges')}:{' '}
         {formatAmount(order.otherCharges)}

@@ -4,6 +4,7 @@ import { parsePygInput } from '../domain/pyg-input.js';
 import { badRequest, notFound } from '../http-error.js';
 import { postExpenseJournal } from './accounting.service.js';
 import { reverseActive } from './journal.service.js';
+import { allocateOpNumber } from './operation-numbers.service.js';
 
 function dayRangeUtc(datedAt: Date) {
   const start = new Date(Date.UTC(datedAt.getUTCFullYear(), datedAt.getUTCMonth(), datedAt.getUTCDate()));
@@ -73,8 +74,11 @@ export async function createExpense(input: {
   }
 
   return prisma.$transaction(async (tx) => {
+    const allocated = await allocateOpNumber(tx, 'expense');
     const expense = await tx.expense.create({
       data: {
+        number: allocated.number,
+        numberLabel: allocated.numberLabel,
         kind: input.kind,
         datedAt: input.datedAt,
         description,

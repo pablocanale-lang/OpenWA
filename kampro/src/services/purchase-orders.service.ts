@@ -30,6 +30,7 @@ import {
   syncPurchaseOrderJournals,
 } from './accounting.service.js';
 import { removeLotsForPurchaseOrder } from './fifo.service.js';
+import { allocateOpNumber } from './operation-numbers.service.js';
 
 const include = {
   forwarder: true,
@@ -350,8 +351,11 @@ export async function createPurchaseOrder(data: {
   const { currency, fxRateToPyg } = currencyAndFx(data.currency, data.fxRateToPyg);
 
   const row = await prisma.$transaction(async (tx) => {
+    const allocated = await allocateOpNumber(tx, 'purchase-order');
     const created = await tx.purchaseOrder.create({
       data: {
+        number: allocated.number,
+        numberLabel: allocated.numberLabel,
         orderedAt: data.orderedAt,
         forwarderId: data.forwarderId,
         supplierId: data.supplierId,

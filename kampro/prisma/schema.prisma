@@ -150,6 +150,8 @@ model Purchase {
 /// Orden de compra a proveedor (flujo operativo de importación).
 model PurchaseOrder {
   id             String              @id @default(cuid())
+  number         Int?                @unique
+  numberLabel    String?             @unique
   status         PurchaseOrderStatus @default(BORRADOR)
   orderedAt      DateTime
   forwarderId    String
@@ -375,6 +377,8 @@ enum PaymentStatus {
 
 model Order {
   id               String      @id @default(cuid())
+  number           Int?        @unique
+  numberLabel      String?     @unique
   /// Resumen denormalizado de las líneas (varios SKU unidos).
   sku              String
   productName      String
@@ -555,6 +559,11 @@ model Account {
   @@index([type])
 }
 
+model OperationSequence {
+  id         String @id
+  nextNumber Int    @default(1)
+}
+
 model JournalSequence {
   id         String @id @default("default")
   nextNumber Int    @default(1)
@@ -635,6 +644,8 @@ model LotConsumption {
 
 model Expense {
   id             String          @id @default(cuid())
+  number         Int?            @unique
+  numberLabel    String?         @unique
   kind           ExpenseKind     @default(GENERAL)
   datedAt        DateTime
   description    String

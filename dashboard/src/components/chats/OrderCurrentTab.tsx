@@ -261,6 +261,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
   return (
     <div className="order-quick-panel__body">
       <p className="order-quick-panel__status">
+        {order.numberLabel ? `${order.numberLabel} · ` : ''}
         {t(`orders.status.${order.status}`)} · {formatPyg(order.totalAmount)}
         {order.invoiceNumber ? ` · ${t('orders.fields.invoice')} ${order.invoiceNumber}` : ''}
       </p>

@@ -74,6 +74,18 @@ function monthBounds() {
   return { from, to };
 }
 
+function todayKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+function rangeQuery(from: string, to: string) {
+  const q = new URLSearchParams();
+  if (from) q.set('from', isoDay(from));
+  q.set('to', isoDay(to || todayKey(), true));
+  return q.toString();
+}
+
 function isoDay(from: string, endOfDay = false) {
   return endOfDay ? `${from}T23:59:59` : `${from}T00:00:00`;
 }
@@ -87,8 +99,8 @@ export function Accounting() {
   const [online, setOnline] = useState<boolean | null>(null);
   const [tab, setTab] = useState<Tab>('journal');
   const bounds = useMemo(() => monthBounds(), []);
-  const [from, setFrom] = useState(bounds.from);
-  const [to, setTo] = useState(bounds.to);
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState(() => todayKey());
   const [ledgerAccountId, setLedgerAccountId] = useState('');
   const [saving, setSaving] = useState(false);
   const [expenseKind, setExpenseKind] = useState<KamproExpense['kind']>('GENERAL');
@@ -105,7 +117,7 @@ export function Accounting() {
   }, []);
 
   const enabled = online === true;
-  const range = { from: isoDay(from), to: isoDay(to, true) };
+  const range = { from, to: to || todayKey(), query: rangeQuery(from, to) };
 
   const accountsQ = useQuery({
     queryKey: ['kampro', 'accounts'],
@@ -113,19 +125,13 @@ export function Accounting() {
     enabled,
   });
   const entriesQ = useQuery({
-    queryKey: ['kampro', 'entries', range.from, range.to],
-    queryFn: () =>
-      kamproFetch<KamproJournalEntry[]>(
-        `/accounting/entries?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`,
-      ),
+    queryKey: ['kampro', 'entries', range.query],
+    queryFn: () => kamproFetch<KamproJournalEntry[]>(`/accounting/entries?${range.query}`),
     enabled,
   });
   const statementsQ = useQuery({
-    queryKey: ['kampro', 'statements', range.from, range.to],
-    queryFn: () =>
-      kamproFetch<KamproStatements>(
-        `/accounting/statements?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`,
-      ),
+    queryKey: ['kampro', 'statements', range.query],
+    queryFn: () => kamproFetch<KamproStatements>(`/accounting/statements?${range.query}`),
     enabled: enabled && STATEMENT_TABS.includes(tab),
   });
   const expensesQ = useQuery({
@@ -134,11 +140,8 @@ export function Accounting() {
     enabled: enabled && (tab === 'expenses' || tab === 'journal'),
   });
   const ledgerQ = useQuery({
-    queryKey: ['kampro', 'ledger', ledgerAccountId, range.from, range.to],
-    queryFn: () =>
-      kamproFetch<KamproLedger>(
-        `/accounting/ledger/${ledgerAccountId}?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`,
-      ),
+    queryKey: ['kampro', 'ledger', ledgerAccountId, range.query],
+    queryFn: () => kamproFetch<KamproLedger>(`/accounting/ledger/${ledgerAccountId}?${range.query}`),
     enabled: enabled && tab === 'ledger' && Boolean(ledgerAccountId),
   });
 
@@ -697,6 +700,7 @@ export function Accounting() {
                 <table>
                   <thead>
                     <tr>
+                      <th>{t('accounting.col.number')}</th>
                       <th>{t('accounting.col.date')}</th>
                       <th>{t('accounting.kind')}</th>
                       <th>{t('accounting.description')}</th>
@@ -708,6 +712,7 @@ export function Accounting() {
                   <tbody>
                     {(expensesQ.data ?? []).map(expense => (
                       <tr key={expense.id}>
+                        <td>{expense.numberLabel || '—'}</td>
                         <td>{expense.datedAt.slice(0, 10)}</td>
                         <td>{t(`accounting.kinds.${expense.kind}`)}</td>
                         <td>{expense.description}</td>

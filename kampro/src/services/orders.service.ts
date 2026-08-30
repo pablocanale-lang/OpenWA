@@ -30,6 +30,7 @@ import { resolveOrderLines, summarizeLines, type OrderLineInput } from './order-
 import { notifySalesGroup, type SalesNotifyResult } from './openwa.service.js';
 import { applyOrderReservation, consumeOrderSale, releaseOrderReservation, restoreOrderSale } from './stock.service.js';
 import { allocateInvoice } from './invoice.service.js';
+import { allocateOpNumber } from './operation-numbers.service.js';
 import { reverseActive } from './journal.service.js';
 import {
   postOrderClose,
@@ -245,8 +246,11 @@ export async function createOrder(input: CreateOrderInput) {
   }
 
   const created = await prisma.$transaction(async (tx) => {
+    const allocated = await allocateOpNumber(tx, 'order');
     const order = await tx.order.create({
       data: {
+        number: allocated.number,
+        numberLabel: allocated.numberLabel,
         sku: summary.sku,
         productName: summary.productName,
         quantity: summary.quantity,

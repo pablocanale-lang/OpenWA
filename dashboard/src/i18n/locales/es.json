@@ -1406,9 +1406,9 @@
       "error": "No se pudo guardar",
       "entryDeleted": "Asiento anulado"
     },
-    "incomeHint": "Ingresos, costos, gastos e IVA del período. El resultado no resta el IVA: el IVA es impuesto, no resultado.",
-    "balanceHint": "Saldos acumulados hasta la fecha Hasta. El resultado del ejercicio se suma al patrimonio.",
-    "cashHint": "Solo movimientos de Caja y Banco. Entradas = débitos de tesorería, salidas = créditos.",
+    "incomeHint": "Acumulado desde el inicio de las operaciones hasta la fecha Hasta. Desde es opcional: si lo dejás vacío se toma todo el histórico. El resultado no resta el IVA: el IVA es impuesto, no resultado.",
+    "balanceHint": "Saldos acumulados desde el inicio hasta la fecha Hasta. Desde es opcional. El resultado del ejercicio se suma al patrimonio.",
+    "cashHint": "Movimientos de Caja y Banco acumulados hasta Hasta. Desde es opcional. Entradas = débitos de tesorería, salidas = créditos.",
     "incomeDetail": "Ingresos",
     "costDetail": "Costos",
     "expenseDetail": "Gastos",

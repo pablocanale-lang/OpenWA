@@ -418,6 +418,7 @@ export function Orders() {
               <table>
                 <thead>
                   <tr>
+                    <th>{t('accounting.col.number')}</th>
                     <th>{t('orders.col.date')}</th>
                     <th>{t('orders.col.client')}</th>
                     <th>{t('orders.fields.phone')}</th>
@@ -433,6 +434,7 @@ export function Orders() {
                 <tbody>
                   {rows.map(order => (
                     <tr key={order.id}>
+                      <td>{order.numberLabel || '—'}</td>
                       <td>{formatOrderDate(order.createdAt, i18n.language)}</td>
                       <td>{order.contactName || order.recipientName}</td>
                       <td>{order.customerPhone}</td>

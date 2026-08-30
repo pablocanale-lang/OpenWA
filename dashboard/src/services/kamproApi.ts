@@ -99,6 +99,8 @@ export type KamproPurchaseOrderLine = {
 
 export type KamproPurchaseOrder = {
   id: string;
+  number?: number | null;
+  numberLabel?: string | null;
   status: PurchaseOrderStatus;
   orderedAt: string;
   origin: string;
@@ -248,6 +250,8 @@ export type KamproOrderLine = {
 
 export type KamproOrder = {
   id: string;
+  number?: number | null;
+  numberLabel?: string | null;
   sku: string;
   productName: string;
   quantity: number;
@@ -437,6 +441,8 @@ export type KamproStatementRow = {
 
 export type KamproExpense = {
   id: string;
+  number?: number | null;
+  numberLabel?: string | null;
   kind: 'GENERAL' | 'SALARIO' | 'PUBLICIDAD' | 'OTRO';
   datedAt: string;
   description: string;
@@ -450,8 +456,9 @@ export type KamproExpense = {
 };
 
 export type KamproStatements = {
-  from: string;
+  from: string | null;
   to: string;
+  accumulated?: boolean;
   incomeStatement: {
     income: KamproStatementRow[];
     costs: KamproStatementRow[];
