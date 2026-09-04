@@ -25,7 +25,11 @@ export interface WwebjsReadyReconcileHost {
 }
 
 const READY_RECONCILE_INTERVAL_MS = 2000;
-export const READY_RECONCILE_TIMEOUT_MS = 90_000;
+// First-link history sync regularly takes 2–4 minutes. The old 90s deadline called
+// recoverFromStuckAuth() mid-pair, which deletes LocalAuth and surfaces as WhatsApp LOGOUT —
+// the phone shows "linking" and then the companion vanishes. Five minutes covers that window
+// (live 2026-08-29 / 2026-09-04) without leaving a wedged session authenticating forever.
+export const READY_RECONCILE_TIMEOUT_MS = 300_000;
 
 // How long after `authenticated` the event bridge is allowed to still be attaching before a reload is
 // considered. whatsapp-web.js clears `eventsAttached` in its constructor (Client.js:109) and sets it
@@ -33,10 +37,10 @@ export const READY_RECONCILE_TIMEOUT_MS = 90_000;
 // up to 30s for window.WWebJS (Client.js:334), then builds ClientInfo and InterfaceController. So a
 // false flag is the NORMAL reading for most of a minute on a loaded host, and reloading on it aborts
 // a healthy attach — the page navigates out from under the in-flight inject(), which then dies before
-// re-exposing the bridge and cannot be retried (#1081). Must exceed upstream's own 30s poll with room
-// for the rest of the pipeline, and stay well under READY_RECONCILE_TIMEOUT_MS so a reload that IS
+// re-exposing the bridge and cannot be retried (#1081). Must exceed upstream's own 30s poll AND the
+// typical first-link sync, and stay well under READY_RECONCILE_TIMEOUT_MS so a reload that IS
 // warranted still has time to reinject before the deadline.
-export const READY_RECONCILE_BRIDGE_RELOAD_GRACE_MS = 45_000;
+export const READY_RECONCILE_BRIDGE_RELOAD_GRACE_MS = 180_000;
 
 export class WwebjsReadyReconcile {
   private readyReconcileTimer: ReturnType<typeof setTimeout> | null = null;
@@ -168,32 +172,11 @@ export class WwebjsReadyReconcile {
   }
 
   /**
-   * One-shot self-heal for a CONNECTED page whose event bridge never attached: reload the page.
-   * whatsapp-web.js re-runs its injection on every `framenavigated`, and a fresh page walks the
-   * whole auth->synced->attach pipeline again (with the level-check patch closing the missed-edge
-   * race), so a reload is the cheapest full reinjection that keeps the saved session intact.
+   * Reloading a CONNECTED first-link page aborts inject() and WhatsApp then LOGOUT (~3 min).
+   * Live 2026-08-29 and 2026-09-04: leave the page alone; the 5 min deadline keeps credentials
+   * if the bridge never attaches (FAILED, restart the browser — no re-pair).
    */
   private maybeReloadDeadBridge(): void {
-    if (this.readyReconcileReloadAttempted) return;
-    const client = this.host.getClient();
-    if (!client || !this.lastProbeStateConnected) return;
-    if ((client as Client & { eventsAttached?: boolean }).eventsAttached !== false) return;
-    // An attach still inside upstream's own budget is slow, not dead — navigating now would abort it.
-    if (Date.now() - this.readyReconcileStartedAt < READY_RECONCILE_BRIDGE_RELOAD_GRACE_MS) return;
-    this.readyReconcileReloadAttempted = true;
-    this.host.logger.warn(
-      'WhatsApp Web is connected but its event bridge never attached; reloading the page to reinject',
-      {
-        sessionId: this.host.config.sessionId,
-        action: 'event_bridge_reload',
-      },
-    );
-    const page = (client as unknown as { pupPage?: { reload?: () => Promise<unknown> } }).pupPage;
-    void page?.reload?.()?.catch((error: unknown) =>
-      this.host.logger.warn('Event-bridge reload failed', {
-        sessionId: this.host.config.sessionId,
-        error: String(error),
-      }),
-    );
+    return;
   }
 }

@@ -388,7 +388,7 @@ describe('WhatsAppWebJsAdapter initialize() retry on a navigation-killed first i
     clientInitSpy
       .mockImplementationOnce(function (this: Client) {
         // The patched hasSynced level-check can fire AUTHENTICATED before the killed evaluate
-        // rejects initialize() — attempt 1 then leaves a live 90s reconcile deadline behind, whose
+        // rejects initialize() — attempt 1 then leaves a live reconcile deadline behind, whose
         // non-bridge branch DELETES credentials (recoverFromStuckAuth). The retry must clear it.
         this.emit('authenticated');
         throw new Error(EXEC_CTX);
@@ -1805,7 +1805,7 @@ describe('WhatsAppWebJsAdapter ready reconciliation (#251/#273)', () => {
     expect(onReady).toHaveBeenCalledTimes(1);
   });
 
-  it('still reloads a genuinely dead bridge once the grace period has elapsed', async () => {
+  it('does not reload a connected page whose event bridge is still attaching', async () => {
     jest.useFakeTimers();
 
     const adapter = newAdapter();
@@ -1818,11 +1818,8 @@ describe('WhatsAppWebJsAdapter ready reconciliation (#251/#273)', () => {
     client.emit('authenticated');
     await jest.advanceTimersByTimeAsync(READY_RECONCILE_BRIDGE_RELOAD_GRACE_MS + 2100);
 
-    expect(reload).toHaveBeenCalledTimes(1);
+    expect(reload).not.toHaveBeenCalled();
 
-    // Upstream's window.WWebJS poll alone is 30s (Client.js:334) and is only one stage of the attach.
-    // The grace has to outlast it, or we go back to aborting healthy attaches; and what remains before
-    // the deadline has to outlast it too, or a warranted reload could never finish reinjecting.
     const UPSTREAM_WWEBJS_POLL_MS = 30_000;
     expect(READY_RECONCILE_BRIDGE_RELOAD_GRACE_MS).toBeGreaterThan(UPSTREAM_WWEBJS_POLL_MS);
     expect(READY_RECONCILE_TIMEOUT_MS - READY_RECONCILE_BRIDGE_RELOAD_GRACE_MS).toBeGreaterThan(
@@ -1833,7 +1830,7 @@ describe('WhatsAppWebJsAdapter ready reconciliation (#251/#273)', () => {
     expect(jest.getTimerCount()).toBe(0);
   });
 
-  it('reloads the page once — and only once — to reinject a dead event bridge, then promotes when it heals', async () => {
+  it('promotes when the event bridge attaches without reloading the page', async () => {
     jest.useFakeTimers();
 
     const adapter = newAdapter();
@@ -1844,13 +1841,11 @@ describe('WhatsAppWebJsAdapter ready reconciliation (#251/#273)', () => {
     });
 
     client.emit('authenticated');
-    // Past the grace period: an attach still unfinished this late is dead, not slow.
     await jest.advanceTimersByTimeAsync(READY_RECONCILE_BRIDGE_RELOAD_GRACE_MS + 2100 * 3);
 
-    expect(reload).toHaveBeenCalledTimes(1);
+    expect(reload).not.toHaveBeenCalled();
     expect(adapter.getStatus()).toBe(EngineStatus.AUTHENTICATING);
 
-    // The reload re-ran the injection and the bridge attached: the next probe promotes normally.
     client.eventsAttached = true;
     await jest.advanceTimersByTimeAsync(2100);
 
@@ -1872,7 +1867,7 @@ describe('WhatsAppWebJsAdapter ready reconciliation (#251/#273)', () => {
     (adapter as unknown as { clearLocalAuth: unknown }).clearLocalAuth = clearLocalAuth;
 
     client.emit('authenticated');
-    await jest.advanceTimersByTimeAsync(91_000);
+    await jest.advanceTimersByTimeAsync(READY_RECONCILE_TIMEOUT_MS + 1_000);
 
     // The link itself is healthy — wiping the only copy of the credentials would trade a
     // restart-fixable fault for a forced re-pair. FAILED with the reason, auth left alone.
@@ -2027,8 +2022,8 @@ describe('WhatsAppWebJsAdapter ready reconciliation (#251/#273)', () => {
   });
 
   // A re-fired 'authenticated' (whatsapp-web.js can emit it again on a resume/resync before 'ready')
-  // must NOT restart the 90s reconcile window, or a flapping link keeps the probe alive forever.
-  it('does not reset the 90s reconcile deadline when authenticated re-fires mid-probe', async () => {
+  // must NOT restart the reconcile window, or a flapping link keeps the probe alive forever.
+  it('does not reset the reconcile deadline when authenticated re-fires mid-probe', async () => {
     jest.useFakeTimers();
 
     const adapter = newAdapter();
@@ -2036,14 +2031,14 @@ describe('WhatsAppWebJsAdapter ready reconciliation (#251/#273)', () => {
     const { client } = attachFakeClient(adapter, { pupPage: { evaluate: jest.fn().mockResolvedValue(false) } });
 
     client.emit('authenticated');
-    await jest.advanceTimersByTimeAsync(80_000);
+    await jest.advanceTimersByTimeAsync(READY_RECONCILE_TIMEOUT_MS - 10_000);
     expect(adapter.getStatus()).toBe(EngineStatus.AUTHENTICATING);
 
-    client.emit('authenticated'); // re-fire 80s in — must not restart the window
-    await jest.advanceTimersByTimeAsync(11_000); // 91s total since the FIRST authenticated
+    client.emit('authenticated'); // re-fire near the deadline — must not restart the window
+    await jest.advanceTimersByTimeAsync(11_000);
 
     expect(adapter.getStatus()).toBe(EngineStatus.AUTHENTICATING);
-    expect(jest.getTimerCount()).toBe(0); // gave up at 90s; not reset by the re-fire
+    expect(jest.getTimerCount()).toBe(0); // gave up at the deadline; not reset by the re-fire
   });
 
   // beginClientTeardown sets DISCONNECTED before the awaited destroy/logout; an 'authenticated' event
@@ -2302,7 +2297,7 @@ describe('WhatsAppWebJsAdapter ready reconciliation (#251/#273)', () => {
   });
 
   // The same #982 window for 'authenticated': the re-injected client can re-authenticate on the browser
-  // that is about to be replaced. Reviving to AUTHENTICATING would also re-arm the 90s ready-reconcile
+  // that is about to be replaced. Reviving to AUTHENTICATING would also re-arm the ready-reconcile
   // probe against it.
   it('ignores an authenticated event fired after a LOGOUT disconnect (before teardown starts)', () => {
     jest.useFakeTimers();
@@ -2319,7 +2314,7 @@ describe('WhatsAppWebJsAdapter ready reconciliation (#251/#273)', () => {
   });
 
   // A wedged page can make getState() hang (the exact #251/#273 condition). The probe must keep its
-  // own cadence (a hung probe can't stall the loop) and still honor the 90s give-up deadline.
+  // own cadence (a hung probe can't stall the loop) and still honor the give-up deadline.
   it('keeps probing and self-heals (clears auth + disconnects) when getState hangs past the deadline', async () => {
     jest.useFakeTimers();
     const rmSpy = jest.spyOn(fs.promises, 'rm').mockResolvedValue(undefined);
@@ -2336,9 +2331,9 @@ describe('WhatsAppWebJsAdapter ready reconciliation (#251/#273)', () => {
     await jest.advanceTimersByTimeAsync(50_000);
     expect(jest.getTimerCount()).toBe(1); // chain still alive despite the hung probe
 
-    await jest.advanceTimersByTimeAsync(45_000); // ~95s total
+    await jest.advanceTimersByTimeAsync(READY_RECONCILE_TIMEOUT_MS - 50_000 + 5_000);
     expect(adapter.getStatus()).toBe(EngineStatus.DISCONNECTED); // never falsely promoted; self-healed
-    expect(jest.getTimerCount()).toBe(0); // gave up at the 90s deadline
+    expect(jest.getTimerCount()).toBe(0); // gave up at the reconcile deadline
     expect(client.getState).toHaveBeenCalledTimes(1); // at-most-one-in-flight guard held
     // Self-heal: the broken auth is cleared and a disconnect surfaced so the lifecycle re-pairs (QR).
     expect(rmSpy).toHaveBeenCalledWith(expect.stringContaining('session-sess-1'), {
@@ -2388,7 +2383,7 @@ describe('WhatsAppWebJsAdapter ready reconciliation (#251/#273)', () => {
     });
 
     client.emit('authenticated');
-    await jest.advanceTimersByTimeAsync(95_000); // past the 90s give-up deadline
+    await jest.advanceTimersByTimeAsync(READY_RECONCILE_TIMEOUT_MS + 5_000);
 
     const timeout = warnSpy.mock.calls.find(([message]) => /Timed out waiting/i.test(String(message)));
     expect(timeout).toBeDefined();

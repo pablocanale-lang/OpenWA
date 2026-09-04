@@ -74,4 +74,4 @@ Encomienda: `PAGO CONFIRMADO` obligatorio antes de `LISTO PARA DESPACHO`. Delive
 - Escuchar eventos/webhooks; responder y enviar archivos (p. ej. foto de factura) vía API.
 - No modificar `src/` del core de OpenWA salvo que el usuario lo pida explícitamente.
 - Kampro vive como capa aparte (app/plugin/servicio), no mezclar tablas con sesiones/mensajes de OpenWA.
-- Vincular WhatsApp en el VPS: Chrome **con pantalla** (noVNC). Ver `.cursor/rules/openwa-vps-headed.mdc`. No copiar el perfil de la PC ni usar headless.
+- Vincular WhatsApp en el VPS: Chrome **con pantalla** (noVNC), Web asentado (nunca `WWEBJS_WEB_VERSION=off`), sin recargar la página a mitad de sync. Sesión **`pcc`**. Ver `.cursor/rules/openwa-vps-headed.mdc`. No copiar el perfil de la PC ni usar headless.

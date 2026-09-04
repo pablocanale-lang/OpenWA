@@ -50,7 +50,7 @@ function isNavigationShapedInitRejection(reason: string): boolean {
 // slow host, and upstream's re-inject then polls up to 30s for window.WWebJS (Client.js:332-343);
 // ceiling: one watchdog interval (60s), so a page that navigates and then wedges loses at most one
 // probe to the grace and still dies within one extra interval. NOT a sibling of
-// READY_RECONCILE_BRIDGE_RELOAD_GRACE_MS above: that one is capped by the 90s reconcile deadline,
+// READY_RECONCILE_BRIDGE_RELOAD_GRACE_MS above: that one is capped by the reconcile deadline,
 // this one by keeping the watchdog's safety net alive — do not "harmonize" them.
 export const NAVIGATION_REINJECT_GRACE_MS = 60_000;
 
@@ -463,7 +463,7 @@ export class WwebjsLifecycle {
 
     this.client.on('authenticated', () => {
       // Only the first authentication starts the reconcile window. Ignore a re-fired 'authenticated'
-      // while already AUTHENTICATING (so it can't restart the 90s deadline), once READY/FAILED, or any
+      // while already AUTHENTICATING (so it can't restart the reconcile deadline), once READY/FAILED, or any
       // time after the adapter is finished — teardown, or a reported disconnect the lifecycle has not
       // replaced the engine for yet (#982). The initial status is DISCONNECTED too, so "finished" is
       // carried by the flags, never by the status alone.
@@ -476,6 +476,10 @@ export class WwebjsLifecycle {
       ) {
         return;
       }
+      this.host.logger.log('WhatsApp accepted the link; waiting for runtime ready (do not restart)', {
+        sessionId: this.host.config.sessionId,
+        action: 'authenticated',
+      });
       this.setStatus(EngineStatus.AUTHENTICATING);
       this.qrCode = null;
       this.host.scheduleReadyReconcile();

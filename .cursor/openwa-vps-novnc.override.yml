@@ -23,6 +23,10 @@ services:
       - DISPLAY=novnc:0.0
       - PUPPETEER_HEADLESS=false
       - HOME=/home/openwa
+    # Live hotfix until the image is rebuilt: 5 min reconcile + no page reload (wwebjs-reconcile.ts).
+    # Pairing also needs a settled WWEBJS_WEB_VERSION in /opt/openwa/.env — never "off".
+    volumes:
+      - /opt/openwa/hotfix/wwebjs-reconcile.js:/app/dist/engine/adapters/wwebjs-reconcile.js:ro
     tmpfs:
       - /tmp
       - /home/openwa:uid=997,gid=997,mode=700
