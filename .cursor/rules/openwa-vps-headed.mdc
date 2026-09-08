@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Gateway WhatsApp en el VPS (método que funciona)
 
-OpenWA en DigitalOcean (`root@206.189.206.119`, `/opt/openwa`) es solo el gateway. Motor: **whatsapp-web.js** (hace falta el historial si el VPS se apaga). Sesión de producción: **`pablo`** (id `3eb5967b-84eb-49ae-8f3a-cf46a435d4b6`), teléfono **595981051171**, pushName **Kampro**. Dashboard: https://app.kampro.store
+OpenWA en DigitalOcean (`root@`, `/opt/openwa`) es solo el gateway. Motor: **whatsapp-web.js** (hace falta el historial si el VPS se apaga). Sesión de producción: **`pablo`** (id ``), teléfono **595981051171**, pushName **Kampro**. Dashboard: https://app.kampro.store
 
 ## Qué no hacer
 
