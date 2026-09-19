@@ -3,23 +3,33 @@
 # Deploy OpenWA + Kampro CRM to the production VPS (root@206.189.206.119, /opt/openwa).
 #
 # Order of operations (see docs/ai/05-instalacion-ejecucion-y-deploy.md):
-#   1. Local tests: `npm run test` (OpenWA), `cd kampro && npm run test`, and `dashboard:build` if
-#      dashboard/ changed. Abort here on any failure — nothing below runs.
-#   2. Remote backup, before touching anything: OpenWA's data (main.sqlite, openwa.sqlite, the
+#   1. Package the target ref with `git archive` and ship it to the VPS as a single tarball.
+#   2. Tests run on the VPS itself, in a throwaway scratch directory OUTSIDE /opt/openwa
+#      (/opt/openwa-deploy-scratch-<timestamp>): `npm ci` + `npm run test --runInBand` for
+#      OpenWA, `npm ci` + `npm run test` for Kampro, and `npm run dashboard:build` if
+#      dashboard/ changed. Abort here on any failure — nothing below runs, nothing in
+#      /opt/openwa or the live containers is touched. This intentionally does NOT run on the
+#      operator's machine: a chunk of OpenWA's suite asserts real POSIX file-permission bits
+#      (chmod/stat mode 0600/0700) that Windows/NTFS cannot reproduce, so `npm run test` can
+#      never pass there regardless of the code (see the 2026-09-19 deploy-design discussion).
+#      Tests run niced/ionice'd (idle priority) so they don't starve the live Chrome/WhatsApp
+#      process on this small droplet.
+#   3. Remote backup, before touching anything: OpenWA's data (main.sqlite, openwa.sqlite, the
 #      whatsapp-web.js session, media, plugins — via the project's own scripts/backup.sh run
 #      INSIDE the openwa-api container, then copied out), Kampro's kampro.sqlite, and the current
 #      docker-compose.override.yml. All land in /opt/openwa/backups/<timestamp>/.
-#   3. Sync code: `git archive` of the target ref, shipped as a single tarball (no local rsync on
-#      Windows), extracted and rsynced into /opt/openwa on the remote side. Protects (never
-#      overwrites/deletes): .env, kampro/.env, data/, kampro/data/, node_modules/, .git/,
-#      *.sqlite*, hotfix/ (a server-only live patch not tracked in this repo — see
-#      .cursor/rules/openwa-vps-headed.mdc), backups/, .last-deploy-sha.
-#   4. Kampro schema: `npx prisma generate` + `npx prisma db push` — NEVER `migrate deploy`. This
-#      project has no prisma/migrations/ directory (neither locally nor on the VPS); Prisma
-#      Migrate was never initialized here. Introducing it now would require baselining a
-#      production database that already holds real business data, which is exactly the
-#      data-loss risk we decided (2026-09-19) to avoid. Keep using `db push`.
-#   5. Restart:
+#   4. Promote the already-tested scratch tree into /opt/openwa via rsync (server-side; no
+#      second transfer). Protects (never overwrites/deletes): .env, kampro/.env, data/,
+#      kampro/data/, node_modules/, .git/, *.sqlite*, hotfix/ (a server-only live patch not
+#      tracked in this repo — see .cursor/rules/openwa-vps-headed.mdc), backups/,
+#      .last-deploy-sha.
+#   5. Kampro schema: `npx prisma generate` + `npx prisma db push` on the live kampro/ tree —
+#      NEVER `migrate deploy`. This project has no prisma/migrations/ directory (neither
+#      locally nor on the VPS); Prisma Migrate was never initialized here. Introducing it now
+#      would require baselining a production database that already holds real business data,
+#      which is exactly the data-loss risk we decided (2026-09-19) to avoid. Keep using
+#      `db push`.
+#   6. Restart:
 #        - kampro.service (systemd) restarts whenever kampro/ changed. Low risk: a plain
 #          Fastify process, no browser/session state.
 #        - openwa-api (Docker) is rebuilt + recreated ONLY when files outside kampro/ changed.
@@ -28,7 +38,7 @@
 #          WWEBJS_WEB_VERSION=off, never force PUPPETEER_HEADLESS=true, never delete
 #          session-pcc or the openwa-data volume, never reload the page mid-sync, never
 #          re-scan a QR unless a human confirmed the session actually logged out.
-#   6. Healthcheck: GET /health on both services, then confirm the WhatsApp session status is
+#   7. Healthcheck: GET /health on both services, then confirm the WhatsApp session status is
 #      still "ready" (AUTO_START_SESSIONS=true means a routine container recreate should
 #      reconnect on its own — the script only calls POST /start once, as a fallback, if the
 #      session hasn't come back on its own after a short wait). On any failure: stop, print
@@ -42,6 +52,7 @@
 #   - Does NOT delete files on the server unless --prune is passed explicitly.
 #   - Never prints secrets. Reads the OpenWA API key remotely, inside the container, only to
 #     call /api/sessions for a status check; the value itself is never echoed or logged.
+#   - Cleans up its own scratch dir + tarball on the VPS on exit, success or failure.
 #
 # Usage:
 #   scripts/deploy-vps.sh [--yes] [--dry-run] [--allow-dirty] [--prune] [--ref <git-ref>]
@@ -69,7 +80,7 @@ while [ $# -gt 0 ]; do
     --allow-dirty) ALLOW_DIRTY=1 ;;
     --prune) PRUNE=1 ;;
     --ref) shift; REF="${1:?--ref requires a value}" ;;
-    -h|--help) sed -n '2,55p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,60p' "$0"; exit 0 ;;
     *) die "opción desconocida: $1" ;;
   esac
   shift
@@ -136,12 +147,13 @@ if [ "$FIRST_DEPLOY" -eq 1 ]; then
 else
   echo "Último deploy   : $LAST_SHA"
 fi
-echo "Archivos cambiados: $(echo "$CHANGED_FILES" | grep -c . || true)"
+echo "Archivos cambiados: $(grep -c . <<< "$CHANGED_FILES" || true)"
 echo "¿Toca kampro/?        : $([ $KAMPRO_CHANGED -eq 1 ] && echo si || echo no)"
 echo "¿Toca schema.prisma?  : $([ $SCHEMA_CHANGED -eq 1 ] && echo 'si -> se correrá prisma db push' || echo no)"
 echo "¿Toca dashboard/?     : $([ $DASHBOARD_CHANGED -eq 1 ] && echo si || echo no)"
 echo "¿Toca OpenWA/src fuera de kampro/? : $([ $ROOT_CHANGED -eq 1 ] && echo 'SI -> se reconstruye y recrea el contenedor openwa-api (toca la sesión pcc)' || echo no)"
 echo "Borrado de archivos huérfanos en el VPS (--prune): $([ $PRUNE -eq 1 ] && echo activado || echo 'desactivado (solo se agregan/actualizan archivos)')"
+echo "Tests: corren EN EL VPS (scratch dir fuera de /opt/openwa), no en esta máquina."
 echo "============================================================"
 echo
 
@@ -155,28 +167,63 @@ if [ "$ASSUME_YES" -ne 1 ]; then
   [ "$CONFIRM" = "DEPLOY" ] || die "cancelado por el usuario."
 fi
 
-# ---------------------------------------------------------------------------
-# 1. Tests locales (aborta todo si algo falla)
-# ---------------------------------------------------------------------------
-log "Corriendo tests de OpenWA (npm run test) ..."
-npm run test
-
-log "Corriendo tests de Kampro (kampro: npm run test) ..."
-(cd kampro && npm run test)
-
-if [ "$DASHBOARD_CHANGED" -eq 1 ]; then
-  log "dashboard/ cambió: corriendo build de verificación (npm run dashboard:ci && npm run dashboard:build) ..."
-  npm run dashboard:ci
-  npm run dashboard:build
-else
-  log "dashboard/ sin cambios: se omite el build local de verificación."
-fi
-
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 REMOTE_BACKUP_DIR="$VPS_DIR/backups/$TIMESTAMP"
+REMOTE_TAR="/tmp/openwa-deploy-$TIMESTAMP.tar"
+REMOTE_SCRATCH="/opt/openwa-deploy-scratch-$TIMESTAMP"
+
+cleanup_remote_scratch() {
+  ssh_remote "rm -rf '$REMOTE_SCRATCH' '$REMOTE_TAR'" >/dev/null 2>&1 || true
+}
 
 # ---------------------------------------------------------------------------
-# 2. Backup remoto (antes de tocar nada)
+# 1. Empaquetar y copiar el ref al VPS
+# ---------------------------------------------------------------------------
+log "Empaquetando $REF con git archive ..."
+LOCAL_TMP="$(mktemp -d)"
+trap 'rm -rf "$LOCAL_TMP"; cleanup_remote_scratch' EXIT
+TARBALL="$LOCAL_TMP/deploy-$TIMESTAMP.tar"
+git archive --format=tar "$TARGET_SHA" -o "$TARBALL"
+
+log "Copiando tarball al VPS ..."
+scp -q "$TARBALL" "$VPS_HOST:$REMOTE_TAR"
+
+# ---------------------------------------------------------------------------
+# 2. Tests en el VPS, en un directorio scratch fuera de /opt/openwa (aborta si falla)
+# ---------------------------------------------------------------------------
+log "Corriendo tests EN EL VPS (scratch dir, no toca /opt/openwa) ..."
+ssh_remote bash -s -- "$REMOTE_TAR" "$REMOTE_SCRATCH" "$DASHBOARD_CHANGED" <<'REMOTE_EOF'
+set -euo pipefail
+REMOTE_TAR="$1"
+SCRATCH="$2"
+DASHBOARD_CHANGED="$3"
+
+NICE=(nice -n 19)
+command -v ionice >/dev/null 2>&1 && NICE=(nice -n 19 ionice -c3)
+
+mkdir -p "$SCRATCH"
+tar -xf "$REMOTE_TAR" -C "$SCRATCH"
+cd "$SCRATCH"
+
+echo "=== npm ci (OpenWA; incluye dashboard/ vía postinstall) ==="
+"${NICE[@]}" npm ci --no-audit --no-fund
+
+echo "=== npm run test (OpenWA, --runInBand para no competir por CPU/RAM con Chrome) ==="
+"${NICE[@]}" npm run test -- --runInBand
+
+echo "=== Kampro: npm ci + npm run test ==="
+(cd kampro && "${NICE[@]}" npm ci --no-audit --no-fund && "${NICE[@]}" npm run test)
+
+if [ "$DASHBOARD_CHANGED" = "1" ]; then
+  echo "=== dashboard/ cambió: build de verificación ==="
+  "${NICE[@]}" npm run dashboard:build
+fi
+
+echo "TESTS_OK"
+REMOTE_EOF
+
+# ---------------------------------------------------------------------------
+# 3. Backup remoto (antes de tocar /opt/openwa)
 # ---------------------------------------------------------------------------
 log "Backup remoto en $REMOTE_BACKUP_DIR ..."
 ssh_remote "mkdir -p '$REMOTE_BACKUP_DIR'"
@@ -220,29 +267,14 @@ log "  -> Copiando docker-compose.override.yml actual ..."
 ssh_remote "cp -p '$VPS_DIR/docker-compose.override.yml' '$REMOTE_BACKUP_DIR/docker-compose.override.yml'"
 
 # ---------------------------------------------------------------------------
-# 3. Sincronizar código (git archive -> scp -> rsync remoto)
+# 4. Promover el árbol ya testeado a /opt/openwa (rsync server-side, sin retransferir)
 # ---------------------------------------------------------------------------
-log "Empaquetando $REF con git archive ..."
-LOCAL_TMP="$(mktemp -d)"
-trap 'rm -rf "$LOCAL_TMP"' EXIT
-TARBALL="$LOCAL_TMP/deploy-$TIMESTAMP.tar"
-git archive --format=tar "$TARGET_SHA" -o "$TARBALL"
-
-log "Copiando tarball al VPS ..."
-REMOTE_TAR="/tmp/openwa-deploy-$TIMESTAMP.tar"
-scp -q "$TARBALL" "$VPS_HOST:$REMOTE_TAR"
-
 log "Sincronizando en el VPS (rsync $([ $PRUNE -eq 1 ] && echo 'con --delete' || echo 'sin --delete'))..."
-ssh_remote bash -s -- "$VPS_DIR" "$REMOTE_TAR" "$TIMESTAMP" "$PRUNE" <<'REMOTE_EOF'
+ssh_remote bash -s -- "$VPS_DIR" "$REMOTE_SCRATCH" "$PRUNE" <<'REMOTE_EOF'
 set -euo pipefail
 VPS_DIR="$1"
-REMOTE_TAR="$2"
-TIMESTAMP="$3"
-PRUNE="$4"
-
-STAGE="/tmp/openwa-deploy-stage-$TIMESTAMP"
-mkdir -p "$STAGE"
-tar -xf "$REMOTE_TAR" -C "$STAGE"
+SCRATCH="$2"
+PRUNE="$3"
 
 EXCLUDES=(
   '--exclude=.env'
@@ -263,14 +295,12 @@ if [ "$PRUNE" -eq 1 ]; then
   RSYNC_ARGS+=(--delete)
 fi
 
-rsync "${RSYNC_ARGS[@]}" "$STAGE"/ "$VPS_DIR"/
-
-rm -rf "$STAGE" "$REMOTE_TAR"
+rsync "${RSYNC_ARGS[@]}" "$SCRATCH"/ "$VPS_DIR"/
 echo "sync ok"
 REMOTE_EOF
 
 # ---------------------------------------------------------------------------
-# 4. Kampro: dependencias + schema (siempre db push, nunca migrate)
+# 5. Kampro: dependencias + schema (siempre db push, nunca migrate)
 # ---------------------------------------------------------------------------
 if [ "$KAMPRO_CHANGED" -eq 1 ] || [ "$FIRST_DEPLOY" -eq 1 ]; then
   log "Actualizando dependencias y esquema de Kampro ..."
@@ -291,7 +321,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 5. Restart
+# 6. Restart
 # ---------------------------------------------------------------------------
 if [ "$KAMPRO_CHANGED" -eq 1 ] || [ "$FIRST_DEPLOY" -eq 1 ]; then
   log "Reiniciando kampro.service ..."
@@ -355,7 +385,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6. Healthcheck final
+# 7. Healthcheck final
 # ---------------------------------------------------------------------------
 log "Healthcheck final ..."
 ssh_remote bash -s -- "$SESSION_ID" <<'REMOTE_EOF'
@@ -392,7 +422,7 @@ echo "healthcheck ok"
 REMOTE_EOF
 
 # ---------------------------------------------------------------------------
-# 7. Marcar el deploy como exitoso
+# 8. Marcar el deploy como exitoso
 # ---------------------------------------------------------------------------
 ssh_remote "echo '$TARGET_SHA' > '$VPS_DIR/.last-deploy-sha'"
 log "Deploy completo. SHA desplegado: $TARGET_SHA"
