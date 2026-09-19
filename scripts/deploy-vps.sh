@@ -183,7 +183,14 @@ log "Empaquetando $REF con git archive ..."
 LOCAL_TMP="$(mktemp -d)"
 trap 'rm -rf "$LOCAL_TMP"; cleanup_remote_scratch' EXIT
 TARBALL="$LOCAL_TMP/deploy-$TIMESTAMP.tar"
-git archive --format=tar "$TARGET_SHA" -o "$TARBALL"
+# -c core.autocrlf=false: en Windows, core.autocrlf=true hace que `git archive` escriba CRLF para
+# todo archivo sin `eol=lf` explícito en .gitattributes (casi todo el repo salvo *.sh/Dockerfile*/
+# *.patch/*.asc). El tar/Windows local "esconde" esto al extraer (normaliza CRLF->LF de nuevo), pero
+# el VPS (GNU tar real) preserva los bytes tal cual y termina con CRLF de verdad en el código
+# desplegado. Forzar autocrlf=false acá garantiza el mismo contenido LF que ve `git show`,
+# sin importar la config local de quien corra el script. Descubierto y verificado el 2026-09-19
+# contra config/feature-flags.spec.ts, que falla exactamente así con CRLF.
+git -c core.autocrlf=false archive --format=tar "$TARGET_SHA" -o "$TARBALL"
 
 log "Copiando tarball al VPS ..."
 scp -q "$TARBALL" "$VPS_HOST:$REMOTE_TAR"
