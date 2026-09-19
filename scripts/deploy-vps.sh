@@ -242,7 +242,8 @@ VPS_DIR="$1"
 DEST="$2"
 cd "$VPS_DIR"
 COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.override.yml)
-"${COMPOSE[@]}" exec -T openwa-api sh -c 'mkdir -p /app/data/.deploy-backups && BACKUP_DIR=/app/data/.deploy-backups /app/scripts/backup.sh'
+# invocado como `sh script.sh` (no exec directo): la imagen copia backup.sh sin bit +x.
+"${COMPOSE[@]}" exec -T openwa-api sh -c 'mkdir -p /app/data/.deploy-backups && BACKUP_DIR=/app/data/.deploy-backups sh /app/scripts/backup.sh'
 ARCHIVE="$("${COMPOSE[@]}" exec -T openwa-api sh -c 'ls -1t /app/data/.deploy-backups' | head -n1 | tr -d '\r')"
 [ -n "$ARCHIVE" ] || { echo "no se encontró el archivo de backup generado" >&2; exit 1; }
 docker cp "openwa-api:/app/data/.deploy-backups/$ARCHIVE" "$DEST/$ARCHIVE"
