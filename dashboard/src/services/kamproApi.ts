@@ -278,6 +278,7 @@ export type KamproOrder = {
   invoiceNumber: string | null;
   invoiceIssuer: string | null;
   invoiceIssuedAt: string | null;
+  suggestedInvoiceNumber: string | null;
   createdAt: string;
   updatedAt: string;
   items: KamproOrderLine[];
@@ -286,6 +287,7 @@ export type KamproOrder = {
   canCancel: boolean;
   canReturn: boolean;
   canEditDetails: boolean;
+  canEditInvoice: boolean;
   canEditCommercial: boolean;
   canEditShipping: boolean;
   netPaid: number;
@@ -311,6 +313,7 @@ export type CreateOrderPayload = {
   invoiceName: string;
   ruc: string;
   invoiceSettlement?: InvoiceSettlement;
+  invoiceNumber?: string;
   sessionId?: string;
   chatId?: string;
   locationLat?: number;
@@ -329,6 +332,7 @@ export type UpdateOrderPayload = {
   invoiceName?: string;
   ruc?: string;
   invoiceSettlement?: InvoiceSettlement;
+  invoiceNumber?: string;
   locationLat?: number | null;
   locationLng?: number | null;
   locationText?: string | null;
@@ -345,6 +349,13 @@ export function actionNeedsPayment(order: KamproOrder, action: OrderAction): boo
 
 export function actionNeedsShipping(action: OrderAction): boolean {
   return action === 'close';
+}
+
+export function actionIssuesInvoice(order: KamproOrder, action: OrderAction): boolean {
+  if (order.invoiceNumber) return false;
+  if (action === 'confirmPayment' && order.zone === 'INTERIOR') return true;
+  if (action === 'markDelivered' && order.zone === 'ASUNCION') return true;
+  return false;
 }
 
 export function isOpenOrder(status: OrderStatus): boolean {
@@ -443,11 +454,12 @@ export type KamproExpense = {
   id: string;
   number?: number | null;
   numberLabel?: string | null;
-  kind: 'GENERAL' | 'SALARIO' | 'PUBLICIDAD' | 'OTRO';
+  kind: 'GENERAL' | 'COMERCIAL' | 'IMPUESTO' | 'SALARIO' | 'PUBLICIDAD' | 'OTRO';
   datedAt: string;
   description: string;
   amountGrossPyg: number;
   ivaIncluded: boolean;
+  ivaTreatment?: 'IVA_10' | 'IVA_5' | 'EXENTA' | null;
   treasury: TreasuryAccount;
   accountId: string;
   vendor: string | null;

@@ -138,6 +138,18 @@
   gap: 0.5rem;
 }
 
+.accounting-iva-options {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.accounting-iva-options input[type='checkbox'] {
+  width: auto;
+  flex: none;
+}
+
 .accounting-page th.num,
 .accounting-page td.num {
   text-align: right;
@@ -198,9 +210,14 @@
   font-weight: 700;
 }
 
+.accounting-account-parent td {
+  color: var(--text-secondary);
+}
+
 @media (max-width: 900px) {
   .accounting-form .form-grid,
-  .accounting-cash-summary {
+  .accounting-cash-summary,
+  .accounting-iva-options {
     grid-template-columns: 1fr;
   }
 }

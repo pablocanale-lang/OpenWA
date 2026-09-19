@@ -21,7 +21,20 @@ import { formatPyg, parsePygInput } from '../utils/orderPricing';
 import './Accounting.css';
 
 type Tab = 'journal' | 'ledger' | 'income' | 'balance' | 'cashflow' | 'expenses' | 'accounts' | 'manual';
+type ExpenseIvaTreatment = 'IVA_10' | 'IVA_5' | 'EXENTA';
+const EXPENSE_IVA_OPTIONS: ExpenseIvaTreatment[] = ['IVA_10', 'IVA_5', 'EXENTA'];
 const STATEMENT_TABS: Tab[] = ['income', 'balance', 'cashflow'];
+
+function defaultExpenseIva(kind: KamproExpense['kind']): ExpenseIvaTreatment {
+  return kind === 'SALARIO' || kind === 'IMPUESTO' ? 'EXENTA' : 'IVA_10';
+}
+
+function expenseIvaOf(expense: KamproExpense): ExpenseIvaTreatment {
+  if (expense.ivaTreatment === 'IVA_10' || expense.ivaTreatment === 'IVA_5' || expense.ivaTreatment === 'EXENTA') {
+    return expense.ivaTreatment;
+  }
+  return expense.ivaIncluded ? 'IVA_10' : 'EXENTA';
+}
 
 function StatementRows({
   rows,
@@ -104,6 +117,7 @@ export function Accounting() {
   const [ledgerAccountId, setLedgerAccountId] = useState('');
   const [saving, setSaving] = useState(false);
   const [expenseKind, setExpenseKind] = useState<KamproExpense['kind']>('GENERAL');
+  const [expenseIva, setExpenseIva] = useState<ExpenseIvaTreatment>('IVA_10');
   const [manualLines, setManualLines] = useState([
     { accountId: '', debit: '', credit: '' },
     { accountId: '', debit: '', credit: '' },
@@ -153,7 +167,8 @@ export function Accounting() {
   const createExpense = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (saving) return;
-    const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+    const form = event.currentTarget;
+    const data = Object.fromEntries(new FormData(form).entries());
     const amountGrossPyg = parsePygInput(data.amountGrossPyg);
     if (!Number.isInteger(amountGrossPyg) || amountGrossPyg < 1) {
       toast.error(t('accounting.toast.error'), t('accounting.amountHint'));
@@ -166,7 +181,7 @@ export function Accounting() {
       datedAt: isoDay(String(data.datedAt)),
       description,
       amountGrossPyg,
-      ivaIncluded: data.ivaIncluded === 'on',
+      ivaTreatment: expenseIva,
       treasury,
       accountId: String(data.accountId || '') || undefined,
       vendor: String(data.vendor || '') || null,
@@ -178,9 +193,10 @@ export function Accounting() {
         method: editingExpense ? 'PATCH' : 'POST',
         body: JSON.stringify(payload),
       });
-      event.currentTarget.reset();
+      form.reset();
       setEditingExpense(null);
       setExpenseKind('GENERAL');
+      setExpenseIva('IVA_10');
       const treasuryAccount = accounts.find(account => account.role === treasury);
       if (treasuryAccount) setLedgerAccountId(treasuryAccount.id);
       setLastSaved(t('accounting.lastSaved', { description, amount: formatPyg(amountGrossPyg) }));
@@ -196,7 +212,8 @@ export function Accounting() {
 
   const createAccount = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+    const form = event.currentTarget;
+    const data = Object.fromEntries(new FormData(form).entries());
     setSaving(true);
     try {
       await kamproFetch('/accounting/accounts', {
@@ -207,7 +224,7 @@ export function Accounting() {
           parentId: String(data.parentId || '') || null,
         }),
       });
-      event.currentTarget.reset();
+      form.reset();
       refresh();
       toast.success(t('accounting.toast.accountSaved'));
     } catch (err) {
@@ -249,7 +266,8 @@ export function Accounting() {
   const createManual = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (saving) return;
-    const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+    const form = event.currentTarget;
+    const data = Object.fromEntries(new FormData(form).entries());
     setSaving(true);
     try {
       await kamproFetch('/accounting/manual', {
@@ -268,7 +286,7 @@ export function Accounting() {
         { accountId: '', debit: '', credit: '' },
         { accountId: '', debit: '', credit: '' },
       ]);
-      event.currentTarget.reset();
+      form.reset();
       setLastSaved(t('accounting.lastSaved', { description: String(data.memo), amount: '' }));
       setTab('journal');
       refresh();
@@ -607,9 +625,15 @@ export function Accounting() {
                       <select
                         name="kind"
                         value={expenseKind}
-                        onChange={e => setExpenseKind(e.target.value as KamproExpense['kind'])}
+                        onChange={e => {
+                          const kind = e.target.value as KamproExpense['kind'];
+                          setExpenseKind(kind);
+                          if (!editingExpense) setExpenseIva(defaultExpenseIva(kind));
+                        }}
                       >
                         <option value="GENERAL">{t('accounting.kinds.GENERAL')}</option>
+                        <option value="COMERCIAL">{t('accounting.kinds.COMERCIAL')}</option>
+                        <option value="IMPUESTO">{t('accounting.kinds.IMPUESTO')}</option>
                         <option value="SALARIO">{t('accounting.kinds.SALARIO')}</option>
                         <option value="PUBLICIDAD">{t('accounting.kinds.PUBLICIDAD')}</option>
                         <option value="OTRO">{t('accounting.kinds.OTRO')}</option>
@@ -665,17 +689,18 @@ export function Accounting() {
                       {t('accounting.reference')}
                       <input name="reference" defaultValue={editingExpense?.reference ?? ''} />
                     </label>
-                    <label className="check">
-                      <input
-                        key={`${editingExpense?.id ?? 'new'}-${expenseKind}`}
-                        name="ivaIncluded"
-                        type="checkbox"
-                        defaultChecked={
-                          editingExpense ? editingExpense.ivaIncluded : expenseKind !== 'SALARIO'
-                        }
-                      />
-                      {t('accounting.ivaIncluded')}
-                    </label>
+                    <div className="accounting-iva-options">
+                      {EXPENSE_IVA_OPTIONS.map(option => (
+                        <label className="check" key={option}>
+                          <input
+                            type="checkbox"
+                            checked={expenseIva === option}
+                            onChange={() => setExpenseIva(option)}
+                          />
+                          {t(`accounting.iva.${option}`)}
+                        </label>
+                      ))}
+                    </div>
                   </div>
                   <button type="submit" className="btn-primary" disabled={saving}>
                     {saving ? <Loader2 className="animate-spin" size={16} /> : null}
@@ -689,6 +714,7 @@ export function Accounting() {
                       onClick={() => {
                         setEditingExpense(null);
                         setExpenseKind('GENERAL');
+                        setExpenseIva('IVA_10');
                       }}
                     >
                       {t('common.cancel')}
@@ -727,6 +753,7 @@ export function Accounting() {
                               onClick={() => {
                                 setEditingExpense(expense);
                                 setExpenseKind(expense.kind);
+                                setExpenseIva(expenseIvaOf(expense));
                               }}
                             >
                               {t('kampro.form.edit')}
@@ -794,9 +821,12 @@ export function Accounting() {
                   </thead>
                   <tbody>
                     {accounts.map(account => (
-                      <tr key={account.id}>
+                      <tr key={account.id} className={account.postable ? undefined : 'accounting-account-parent'}>
                         <td>{account.code}</td>
-                        <td>{account.name}</td>
+                        <td>
+                          {account.name}
+                          {!account.postable ? <span className="accounting-badge">{t('accounting.notPostable')}</span> : null}
+                        </td>
                         <td>{t(`accounting.types.${account.type}`)}</td>
                       </tr>
                     ))}

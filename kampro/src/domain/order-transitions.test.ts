@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   assertOrderTransition,
   assertShippingLoadedForClose,
+  canEditInvoiceNumber,
   canEditShippingCost,
   initialStatusForZone,
   nextStatusForAction,
@@ -144,5 +145,14 @@ describe('canEditShippingCost', () => {
     assert.equal(canEditShippingCost('CERRADO'), true);
     assert.equal(canEditShippingCost('CONFIRMADO'), false);
     assert.equal(canEditShippingCost('CANCELADO'), false);
+  });
+});
+
+describe('canEditInvoiceNumber', () => {
+  it('se puede cargar o corregir en cualquier etapa, incluso cancelado', () => {
+    assert.equal(canEditInvoiceNumber('CERRADO'), true);
+    assert.equal(canEditInvoiceNumber('CANCELADO'), true);
+    assert.equal(canEditInvoiceNumber('DEVUELTO'), true);
+    assert.equal(canEditInvoiceNumber('PENDIENTE_DE_PAGO'), true);
   });
 });

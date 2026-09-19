@@ -506,6 +506,8 @@ enum AccountRole {
   CARGAS_SOCIALES
   GASTOS_BANCARIOS
   GASTOS_GENERALES
+  GASTOS_COMERCIALES
+  GASTOS_IMPUESTOS
   AJUSTE_INVENTARIO
   CAPITAL
   RESULTADOS_ACUMULADOS
@@ -526,9 +528,17 @@ enum JournalSource {
 
 enum ExpenseKind {
   GENERAL
+  COMERCIAL
+  IMPUESTO
   SALARIO
   PUBLICIDAD
   OTRO
+}
+
+enum ExpenseIvaTreatment {
+  IVA_10
+  IVA_5
+  EXENTA
 }
 
 enum CashFlowClass {
@@ -650,7 +660,8 @@ model Expense {
   datedAt        DateTime
   description    String
   amountGrossPyg Int
-  ivaIncluded    Boolean         @default(true)
+  ivaIncluded    Boolean              @default(true)
+  ivaTreatment   ExpenseIvaTreatment?
   treasury       TreasuryAccount
   accountId      String
   vendor         String?

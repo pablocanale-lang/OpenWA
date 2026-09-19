@@ -58,6 +58,7 @@ export function OrderQuickPanel({
   const [invoiceName, setInvoiceName] = useState(contactName);
   const [ruc, setRuc] = useState('');
   const [invoiceSettlement, setInvoiceSettlement] = useState<InvoiceSettlement>('CONTADO');
+  const [invoiceNumber, setInvoiceNumber] = useState('');
   const [preferredTime, setPreferredTime] = useState('');
   const [payMethod, setPayMethod] = useState<PaymentMethod>('EFECTIVO');
   const [pin, setPin] = useState<LocationPin | null>(null);
@@ -78,6 +79,12 @@ export function OrderQuickPanel({
     queryFn: () => kamproFetch<KamproProduct[]>('/products'),
     enabled: online === true,
   });
+  const nextInvoiceQ = useQuery({
+    queryKey: ['kampro', 'invoices', 'next'],
+    queryFn: () => kamproFetch<{ invoiceNumber: string }>('/invoices/next'),
+    enabled: online === true,
+  });
+  const suggestedInvoice = nextInvoiceQ.data?.invoiceNumber ?? '';
   const products = useMemo(
     () => (productsQ.data ?? []).filter(p => p.status !== 'INACTIVE'),
     [productsQ.data],
@@ -170,6 +177,7 @@ export function OrderQuickPanel({
         sessionId,
         chatId: chat.id,
       };
+      if (invoiceNumber.trim()) payload.invoiceNumber = invoiceNumber.trim();
       if (zone === 'ASUNCION') {
         payload.locationText = locationText;
         if (pin) {
@@ -390,6 +398,16 @@ export function OrderQuickPanel({
               <p className="order-quick-panel__hint">{t('orders.prepaidHint')}</p>
             </div>
           )}
+
+          <label>
+            {t('orders.fields.invoice')}
+            <input
+              value={invoiceNumber}
+              placeholder={suggestedInvoice}
+              onChange={e => setInvoiceNumber(e.target.value)}
+            />
+            <span className="order-quick-panel__hint">{t('orders.fields.invoiceHint')}</span>
+          </label>
 
           <button type="button" className="btn-primary" disabled={!canCreate || saving} onClick={() => void create()}>
             {saving ? <Loader2 className="animate-spin" size={16} /> : null}

@@ -18,7 +18,7 @@ export function operationMemo(
   invoiceNumber?: string | null,
 ): string {
   if (sourceType === 'ORDER') {
-    if (event === 'CLOSE' || event.startsWith('CLOSE')) {
+    if (event === 'CLOSE') {
       return invoiceNumber ? `Venta ${ref} · ${invoiceNumber}` : `Venta ${ref}`;
     }
     if (event.startsWith('COGS')) return `CMV ${ref}`;
@@ -36,4 +36,21 @@ export function operationMemo(
   }
   if (sourceType === 'EXPENSE') return ref;
   return ref;
+}
+
+/** Actualiza un concepto de asiento cuando cambia el número de factura del pedido. */
+export function rewriteInvoiceMemo(
+  memo: string,
+  event: string,
+  ref: string,
+  nextInvoice: string,
+  previousInvoice?: string | null,
+): string {
+  if (event === 'CLOSE') {
+    return operationMemo('ORDER', 'CLOSE', ref, nextInvoice);
+  }
+  if (previousInvoice && previousInvoice !== nextInvoice && memo.includes(previousInvoice)) {
+    return memo.split(previousInvoice).join(nextInvoice);
+  }
+  return memo;
 }

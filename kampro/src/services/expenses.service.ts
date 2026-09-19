@@ -1,5 +1,6 @@
 import { ExpenseKind, JournalSource, type TreasuryAccount } from '@prisma/client';
 import { prisma } from '../db.js';
+import { ivaIncludedFrom, resolveIvaTreatment, type IvaTreatment } from '../domain/iva.js';
 import { parsePygInput } from '../domain/pyg-input.js';
 import { badRequest, notFound } from '../http-error.js';
 import { postExpenseJournal } from './accounting.service.js';
@@ -15,6 +16,8 @@ function dayRangeUtc(datedAt: Date) {
 
 const KIND_ROLE: Record<ExpenseKind, string> = {
   GENERAL: 'GASTOS_GENERALES',
+  COMERCIAL: 'GASTOS_COMERCIALES',
+  IMPUESTO: 'GASTOS_IMPUESTOS',
   SALARIO: 'SUELDOS',
   PUBLICIDAD: 'PUBLICIDAD',
   OTRO: 'GASTOS_GENERALES',
@@ -33,6 +36,7 @@ export async function createExpense(input: {
   datedAt: Date;
   description: string;
   amountGrossPyg: number;
+  ivaTreatment?: IvaTreatment;
   ivaIncluded?: boolean;
   treasury: TreasuryAccount;
   accountId?: string;
@@ -58,7 +62,8 @@ export async function createExpense(input: {
   if (recent) {
     badRequest('Este gasto ya está cargado. Si es otro movimiento, cambiá la descripción.');
   }
-  const ivaIncluded = input.ivaIncluded ?? input.kind !== ExpenseKind.SALARIO;
+  const ivaTreatment = resolveIvaTreatment(input);
+  const ivaIncluded = ivaIncludedFrom(ivaTreatment);
   let accountId = input.accountId;
   if (!accountId) {
     const role = KIND_ROLE[input.kind];
@@ -84,6 +89,7 @@ export async function createExpense(input: {
         description,
         amountGrossPyg,
         ivaIncluded,
+        ivaTreatment,
         treasury: input.treasury,
         accountId: accountId!,
         vendor: input.vendor?.trim() || null,
@@ -96,7 +102,7 @@ export async function createExpense(input: {
       id: expense.id,
       datedAt: input.datedAt,
       gross: amountGrossPyg,
-      ivaIncluded,
+      ivaTreatment,
       expenseRole: role || 'GASTOS_GENERALES',
       expenseAccountId: accountId,
       treasury: input.treasury,
@@ -113,6 +119,7 @@ export async function updateExpense(
     datedAt?: Date;
     description?: string;
     amountGrossPyg?: number;
+    ivaTreatment?: IvaTreatment;
     ivaIncluded?: boolean;
     treasury?: TreasuryAccount;
     accountId?: string;
@@ -131,8 +138,19 @@ export async function updateExpense(
     badRequest('El monto del gasto debe ser un entero en guaraníes mayor a 0');
   }
   const kind = input.kind ?? existing.kind;
-  const ivaIncluded =
-    input.ivaIncluded !== undefined ? input.ivaIncluded : existing.ivaIncluded;
+  const ivaTreatment =
+    input.ivaTreatment !== undefined || input.ivaIncluded !== undefined
+      ? resolveIvaTreatment({
+          ivaTreatment: input.ivaTreatment,
+          ivaIncluded: input.ivaIncluded,
+          kind,
+        })
+      : resolveIvaTreatment({
+          ivaTreatment: existing.ivaTreatment as IvaTreatment | null,
+          ivaIncluded: existing.ivaIncluded,
+          kind,
+        });
+  const ivaIncluded = ivaIncludedFrom(ivaTreatment);
   let accountId = input.accountId ?? existing.accountId;
   if (input.accountId) {
     const account = await prisma.account.findUnique({ where: { id: input.accountId } });
@@ -157,6 +175,7 @@ export async function updateExpense(
         description,
         amountGrossPyg,
         ivaIncluded,
+        ivaTreatment,
         treasury: input.treasury,
         accountId,
         vendor: input.vendor === undefined ? undefined : input.vendor?.trim() || null,
@@ -169,7 +188,7 @@ export async function updateExpense(
       id: expense.id,
       datedAt: expense.datedAt,
       gross: expense.amountGrossPyg,
-      ivaIncluded: expense.ivaIncluded,
+      ivaTreatment,
       expenseRole: role || 'GASTOS_GENERALES',
       expenseAccountId: expense.accountId,
       treasury: expense.treasury,

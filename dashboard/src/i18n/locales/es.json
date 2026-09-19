@@ -1190,6 +1190,7 @@
       "reference": "Comprobante / referencia",
       "shippingCost": "Costo de envío (Gs)",
       "invoice": "Factura",
+      "invoiceHint": "Sigue a la última factura. Cambiá el número si hay facturas anuladas.",
       "settlement": "Condición de factura",
       "cashSale": "Contado",
       "creditSale": "Crédito"
@@ -1234,6 +1235,7 @@
       "returned": "Pedido devuelto; stock recuperado",
       "statusSet": "Etapa actualizada",
       "shippingSaved": "Costo de envío guardado",
+      "invoiceSaved": "Número de factura guardado",
       "error": "No se pudo guardar el pedido",
       "locationAsked": "Pedido de ubicación enviado",
       "notified": "Pedido avisado al grupo Kampro Ventas",
@@ -1336,7 +1338,7 @@
     "addExpense": "Cargar gasto",
     "saveExpense": "Guardar gasto",
     "kind": "Tipo",
-    "amount": "Monto (Gs, con IVA)",
+    "amount": "Monto",
     "amountHint": "Guaraníes enteros. Podés escribir 222000 o 222.000",
     "ledgerHint": "Un gasto pagado desde Banco no aparece en Caja. Elegí la cuenta que se movió.",
     "undo": "Deshacer",
@@ -1347,7 +1349,11 @@
     "description": "Descripción",
     "vendor": "Proveedor / beneficiario",
     "reference": "Referencia",
-    "ivaIncluded": "El monto incluye IVA (÷11)",
+    "iva": {
+      "IVA_10": "IVA 10%",
+      "IVA_5": "IVA 5%",
+      "EXENTA": "Exenta"
+    },
     "defaultAccount": "Cuenta por defecto de este tipo",
     "addAccount": "Agregar cuenta",
     "saveAccount": "Guardar cuenta",
@@ -1355,6 +1361,7 @@
     "type": "Tipo",
     "parent": "Cuenta padre",
     "noParent": "Sin padre",
+    "notPostable": "No imputable",
     "code": "Código",
     "manualTitle": "Asiento libre",
     "manualHint": "El debe tiene que igualar el haber. Usalo para sueldos, ads, saldos iniciales más adelante o cualquier hecho que no nazca de un pedido o una orden de compra.",
@@ -1386,6 +1393,8 @@
     },
     "kinds": {
       "GENERAL": "General",
+      "COMERCIAL": "Comercial",
+      "IMPUESTO": "Impuestos",
       "SALARIO": "Sueldo",
       "PUBLICIDAD": "Publicidad",
       "OTRO": "Otro"

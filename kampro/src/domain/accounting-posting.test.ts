@@ -76,12 +76,38 @@ describe('armado de asientos', () => {
   it('sueldo sin IVA va entero al gasto', () => {
     const lines = linesExpense({
       gross: 3_000_000,
-      ivaIncluded: false,
+      ivaTreatment: 'EXENTA',
       expenseRole: 'SUELDOS',
       treasury: 'BANCO',
       memo: 'sueldo',
     });
     assert.ok(lines.some((l) => l.role === 'SUELDOS' && l.debit === 3_000_000));
     assert.ok(!lines.some((l) => l.role === 'IVA_CREDITO' && l.debit > 0));
+  });
+
+  it('gasto con IVA 10% aparta crédito fiscal ÷11', () => {
+    const lines = linesExpense({
+      gross: 110_000,
+      ivaTreatment: 'IVA_10',
+      expenseRole: 'GASTOS_GENERALES',
+      treasury: 'BANCO',
+      memo: 'gasto 10',
+    });
+    assert.ok(lines.some((l) => l.role === 'GASTOS_GENERALES' && l.debit === 100_000));
+    assert.ok(lines.some((l) => l.role === 'IVA_CREDITO' && l.debit === 10_000));
+    assert.ok(lines.some((l) => l.role === 'BANCO' && l.credit === 110_000));
+  });
+
+  it('gasto con IVA 5% aparta crédito fiscal ÷21', () => {
+    const lines = linesExpense({
+      gross: 105_000,
+      ivaTreatment: 'IVA_5',
+      expenseRole: 'GASTOS_GENERALES',
+      treasury: 'CAJA',
+      memo: 'gasto 5',
+    });
+    assert.ok(lines.some((l) => l.role === 'GASTOS_GENERALES' && l.debit === 100_000));
+    assert.ok(lines.some((l) => l.role === 'IVA_CREDITO' && l.debit === 5_000));
+    assert.ok(lines.some((l) => l.role === 'CAJA' && l.credit === 105_000));
   });
 });

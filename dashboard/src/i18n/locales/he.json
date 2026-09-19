@@ -1190,6 +1190,7 @@
       "products": "Products",
       "shippingCost": "Shipping cost (Gs)",
       "invoice": "Invoice",
+      "invoiceHint": "Follows the last invoice. Change it if a number was voided.",
       "settlement": "Invoice terms",
       "cashSale": "Cash",
       "creditSale": "Credit"
@@ -1236,6 +1237,7 @@
       "locationAsked": "Location request sent",
       "statusSet": "Stage updated",
       "shippingSaved": "Shipping cost saved",
+      "invoiceSaved": "Invoice number saved",
       "notified": "Order posted to the Kampro Ventas group",
       "notifyFailed": "Marked as shipped, but the WhatsApp group could not be notified"
     },
@@ -1345,7 +1347,7 @@
     "addExpense": "Record expense",
     "saveExpense": "Save expense",
     "kind": "Type",
-    "amount": "Amount (Gs, VAT included)",
+    "amount": "Amount",
     "amountHint": "Whole guaraníes. 222000 or 222.000 both work",
     "ledgerHint": "An expense paid from Bank does not show under Cash. Pick the account that moved.",
     "undo": "Undo",
@@ -1356,7 +1358,11 @@
     "description": "Description",
     "vendor": "Supplier / payee",
     "reference": "Reference",
-    "ivaIncluded": "Amount includes VAT (÷11)",
+    "iva": {
+      "IVA_10": "VAT 10%",
+      "IVA_5": "VAT 5%",
+      "EXENTA": "Exempt"
+    },
     "defaultAccount": "Default account for this type",
     "addAccount": "Add account",
     "saveAccount": "Save account",
@@ -1364,6 +1370,7 @@
     "type": "Type",
     "parent": "Parent account",
     "noParent": "No parent",
+    "notPostable": "Header only",
     "code": "Code",
     "manualTitle": "Manual journal entry",
     "manualHint": "Debits must equal credits. Use this for salaries already typed as expenses, opening balances later, or anything the other modules do not post.",
@@ -1395,6 +1402,8 @@
     },
     "kinds": {
       "GENERAL": "General",
+      "COMERCIAL": "Commercial",
+      "IMPUESTO": "Taxes",
       "SALARIO": "Payroll",
       "PUBLICIDAD": "Advertising",
       "OTRO": "Other"

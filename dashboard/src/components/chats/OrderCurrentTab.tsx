@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, MapPin } from 'lucide-react';
 import { messageApi, templateApi, type Chat } from '../../services/api';
 import {
+  actionIssuesInvoice,
   actionNeedsPayment,
   actionNeedsShipping,
   kamproFetch,
@@ -65,6 +66,7 @@ function hydrateFromOrder(order: KamproOrder) {
     invoiceName: order.invoiceName,
     ruc: order.ruc,
     invoiceSettlement: (order.invoiceSettlement ?? 'CONTADO') as InvoiceSettlement,
+    invoiceNumber: order.invoiceNumber ?? '',
     preferredTime: toDatetimeLocalValue(order.preferredTime ?? ''),
     payMethod: (order.paymentMethodPreferred ?? 'EFECTIVO') as PaymentMethod,
     locationManual: order.locationText ?? '',
@@ -104,6 +106,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
     order.zone === 'INTERIOR' ? 'TRANSFERENCIA' : (order.paymentMethodPreferred ?? 'EFECTIVO'),
   );
   const [payRef, setPayRef] = useState('');
+  const [invoiceNumber, setInvoiceNumber] = useState(order.invoiceNumber ?? order.suggestedInvoiceNumber ?? '');
   const [closeOpen, setCloseOpen] = useState(false);
   const [closeShipping, setCloseShipping] = useState(
     order.shippingCostPyg != null ? String(order.shippingCostPyg) : '',
@@ -122,7 +125,8 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         : null,
     );
     setCloseShipping(order.shippingCostPyg != null ? String(order.shippingCostPyg) : '');
-  }, [order.id, order.updatedAt, order.status, order.totalAmount, order.locationText, order.shippingCostPyg]);
+    setInvoiceNumber(order.invoiceNumber ?? order.suggestedInvoiceNumber ?? '');
+  }, [order.id, order.updatedAt, order.status, order.totalAmount, order.locationText, order.shippingCostPyg, order.invoiceNumber, order.suggestedInvoiceNumber]);
 
   useEffect(() => {
     if (order.zone !== 'ASUNCION' || detailsLocked) return;
@@ -144,6 +148,12 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         ruc: form.ruc.trim(),
         invoiceSettlement: form.invoiceSettlement,
       };
+      const invoice = form.invoiceNumber.trim();
+      const currentInvoice = order.invoiceNumber ?? '';
+      const suggested = order.suggestedInvoiceNumber ?? '';
+      if (invoice && invoice !== currentInvoice && !(!currentInvoice && invoice === suggested)) {
+        payload.invoiceNumber = invoice;
+      }
       if (!commercialLocked) {
         payload.items = form.lines.map(line => ({
           sku: line.sku,
@@ -201,6 +211,9 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
               }
             : {}),
           ...(action === 'close' ? { shippingCostPyg } : {}),
+          ...(order.primaryAction && actionIssuesInvoice(order, action) && invoiceNumber.trim()
+            ? { invoiceNumber: invoiceNumber.trim() }
+            : {}),
         }),
       });
       await invalidate();
@@ -227,6 +240,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
       setPayAmount(order.totalAmount);
       setPayMethodConfirm(order.zone === 'INTERIOR' ? 'TRANSFERENCIA' : (order.paymentMethodPreferred ?? 'EFECTIVO'));
       setPayRef('');
+      setInvoiceNumber(order.invoiceNumber ?? order.suggestedInvoiceNumber ?? '');
       setPayOpen(true);
       return;
     }
@@ -369,6 +383,16 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         />
       </label>
       <label>
+        {t('orders.fields.invoice')}
+        <input
+          value={form.invoiceNumber}
+          disabled={detailsLocked}
+          placeholder={order.suggestedInvoiceNumber ?? ''}
+          onChange={e => setForm(prev => ({ ...prev, invoiceNumber: e.target.value }))}
+        />
+        <span className="order-quick-panel__hint">{t('orders.fields.invoiceHint')}</span>
+      </label>
+      <label>
         {t('orders.fields.settlement')}
         <select
           value={form.invoiceSettlement}
@@ -467,6 +491,17 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
             {t('orders.fields.reference')}
             <input value={payRef} onChange={e => setPayRef(e.target.value)} />
           </label>
+          {order.primaryAction && actionIssuesInvoice(order, order.primaryAction) && (
+            <label>
+              {t('orders.fields.invoice')}
+              <input
+                value={invoiceNumber}
+                onChange={e => setInvoiceNumber(e.target.value)}
+                placeholder={order.suggestedInvoiceNumber ?? ''}
+              />
+              <span className="order-quick-panel__hint">{t('orders.fields.invoiceHint')}</span>
+            </label>
+          )}
         </div>
       </Modal>
 

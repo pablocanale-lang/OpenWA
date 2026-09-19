@@ -173,6 +173,17 @@
   background: var(--bg-white);
 }
 
+.orders-invoice-input {
+  width: 11.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  background: var(--bg-white);
+}
+
 .orders-settlement {
   margin-top: 0.25rem;
   font-size: 0.75rem;

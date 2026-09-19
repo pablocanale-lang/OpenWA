@@ -9,6 +9,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useToast } from '../hooks/useToast';
 import { useRole } from '../hooks/useRole';
 import {
+  actionIssuesInvoice,
   actionNeedsPayment,
   actionNeedsShipping,
   bootstrapKamproKey,
@@ -59,6 +60,59 @@ function formatOrderDate(iso: string, locale: string): string {
     minute: '2-digit',
     hour12: false,
   }).format(date);
+}
+
+function sameInvoiceNumber(left: string, right: string): boolean {
+  const norm = (raw: string) => {
+    const trimmed = raw.trim();
+    if (/^\d{1,7}$/.test(trimmed)) return `001-001-${trimmed.padStart(7, '0')}`;
+    const match = trimmed.match(/^(\d{1,3})-(\d{1,3})-(\d{1,7})$/);
+    if (!match) return trimmed;
+    return `${match[1].padStart(3, '0')}-${match[2].padStart(3, '0')}-${match[3].padStart(7, '0')}`;
+  };
+  return norm(left) === norm(right);
+}
+
+function InvoiceNumberCell({
+  order,
+  disabled,
+  onSave,
+}: {
+  order: KamproOrder;
+  disabled: boolean;
+  onSave: (order: KamproOrder, value: string) => void;
+}) {
+  const { t } = useTranslation();
+  const suggested = order.suggestedInvoiceNumber ?? '';
+  const [value, setValue] = useState(order.invoiceNumber ?? '');
+
+  useEffect(() => {
+    setValue(order.invoiceNumber ?? '');
+  }, [order.id, order.invoiceNumber]);
+
+  return (
+    <input
+      className="orders-invoice-input"
+      value={value}
+      disabled={disabled}
+      placeholder={suggested || t('orders.fields.invoice')}
+      title={t('orders.fields.invoiceHint')}
+      autoComplete="off"
+      onChange={e => setValue(e.target.value)}
+      onBlur={e => {
+        const trimmed = e.target.value.trim();
+        if (!trimmed) {
+          setValue(order.invoiceNumber ?? '');
+          return;
+        }
+        onSave(order, trimmed);
+      }}
+      onKeyDown={e => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+      }}
+      aria-label={t('orders.fields.invoice')}
+    />
+  );
 }
 
 function ShippingCostCell({
@@ -229,6 +283,7 @@ export function Orders() {
   const [payRef, setPayRef] = useState('');
   const [closeTarget, setCloseTarget] = useState<KamproOrder | null>(null);
   const [closeShipping, setCloseShipping] = useState('');
+  const [invoiceNumber, setInvoiceNumber] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -269,6 +324,7 @@ export function Orders() {
       setPayAmount(order.totalAmount);
       setPayMethod(order.zone === 'INTERIOR' ? 'TRANSFERENCIA' : (order.paymentMethodPreferred ?? 'EFECTIVO'));
       setPayRef('');
+      setInvoiceNumber(order.invoiceNumber ?? order.suggestedInvoiceNumber ?? '');
       return;
     }
     if (actionNeedsShipping(order.primaryAction)) {
@@ -301,6 +357,9 @@ export function Orders() {
               }
             : {}),
           ...(action === 'close' ? { shippingCostPyg } : {}),
+          ...(actionIssuesInvoice(order, action) && invoiceNumber.trim()
+            ? { invoiceNumber: invoiceNumber.trim() }
+            : {}),
         }),
       });
       await queryClient.invalidateQueries({ queryKey: ['kampro'] });
@@ -362,6 +421,27 @@ export function Orders() {
       });
       await queryClient.invalidateQueries({ queryKey: ['kampro'] });
       toast.success(t('orders.toast.shippingSaved'));
+    } catch (err) {
+      toast.error(t('orders.toast.error'), err instanceof Error ? err.message : undefined);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveInvoiceNumber = async (order: KamproOrder, value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return;
+    }
+    if (order.invoiceNumber && sameInvoiceNumber(trimmed, order.invoiceNumber)) return;
+    setSaving(true);
+    try {
+      await kamproFetch(`/orders/${order.id}/invoice`, {
+        method: 'PATCH',
+        body: JSON.stringify({ invoiceNumber: trimmed }),
+      });
+      await queryClient.invalidateQueries({ queryKey: ['kampro'] });
+      toast.success(t('orders.toast.invoiceSaved'));
     } catch (err) {
       toast.error(t('orders.toast.error'), err instanceof Error ? err.message : undefined);
     } finally {
@@ -459,7 +539,9 @@ export function Orders() {
                         )}
                       </td>
                       <td>
-                        {order.invoiceNumber ? (
+                        {canWrite ? (
+                          <InvoiceNumberCell order={order} disabled={saving} onSave={saveInvoiceNumber} />
+                        ) : order.invoiceNumber ? (
                           <span className="orders-invoice" title={order.invoiceIssuer ?? undefined}>
                             {order.invoiceNumber}
                           </span>
@@ -570,6 +652,17 @@ export function Orders() {
               {t('orders.fields.reference')}
               <input value={payRef} onChange={e => setPayRef(e.target.value)} />
             </label>
+            {pending.primaryAction && actionIssuesInvoice(pending, pending.primaryAction) && (
+              <label>
+                {t('orders.fields.invoice')}
+                <input
+                  value={invoiceNumber}
+                  onChange={e => setInvoiceNumber(e.target.value)}
+                  placeholder={pending.suggestedInvoiceNumber ?? ''}
+                />
+                <span className="orders-settlement">{t('orders.fields.invoiceHint')}</span>
+              </label>
+            )}
           </div>
         )}
       </Modal>

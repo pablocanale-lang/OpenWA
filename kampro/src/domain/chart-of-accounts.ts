@@ -21,6 +21,8 @@ export const ACCOUNT_ROLES = [
   'CARGAS_SOCIALES',
   'GASTOS_BANCARIOS',
   'GASTOS_GENERALES',
+  'GASTOS_COMERCIALES',
+  'GASTOS_IMPUESTOS',
   'AJUSTE_INVENTARIO',
   'CAPITAL',
   'RESULTADOS_ACUMULADOS',
@@ -43,7 +45,9 @@ export const SYSTEM_ACCOUNTS: SystemAccountSeed[] = [
   { code: '1', name: 'ACTIVO', type: 'ASSET', parentCode: null, postable: false },
   { code: '1.1', name: 'ACTIVO CORRIENTE', type: 'ASSET', parentCode: '1', postable: false },
   { code: '1.1.01', name: 'Caja', type: 'ASSET', parentCode: '1.1', postable: true, role: 'CAJA' },
-  { code: '1.1.02', name: 'Banco', type: 'ASSET', parentCode: '1.1', postable: true, role: 'BANCO' },
+  { code: '1.1.02', name: 'Banco', type: 'ASSET', parentCode: '1.1', postable: false },
+  { code: '1.1.02.01', name: 'UENO BANK - cta. ahorro 6193146823 - PYG', type: 'ASSET', parentCode: '1.1.02', postable: true, role: 'BANCO' },
+  { code: '1.1.02.02', name: 'UENO BANK - cta. ahorro 6113146824 - USD', type: 'ASSET', parentCode: '1.1.02', postable: true },
   { code: '1.1.03', name: 'Cuentas por cobrar', type: 'ASSET', parentCode: '1.1', postable: true, role: 'CXC' },
   { code: '1.1.04', name: 'Anticipos a proveedores', type: 'ASSET', parentCode: '1.1', postable: true, role: 'ANTICIPO_PROVEEDORES' },
   { code: '1.1.05', name: 'IVA crédito fiscal', type: 'ASSET', parentCode: '1.1', postable: true, role: 'IVA_CREDITO' },
@@ -75,7 +79,37 @@ export const SYSTEM_ACCOUNTS: SystemAccountSeed[] = [
   { code: '6.1.05', name: 'Gastos bancarios', type: 'EXPENSE', parentCode: '6', postable: true, role: 'GASTOS_BANCARIOS' },
   { code: '6.1.06', name: 'Gastos generales', type: 'EXPENSE', parentCode: '6', postable: true, role: 'GASTOS_GENERALES' },
   { code: '6.1.07', name: 'Ajustes de inventario', type: 'EXPENSE', parentCode: '6', postable: true, role: 'AJUSTE_INVENTARIO' },
+  { code: '6.1.08', name: 'Impuestos', type: 'EXPENSE', parentCode: '6', postable: true, role: 'GASTOS_IMPUESTOS' },
+  { code: '6.1.09', name: 'Gastos comerciales', type: 'EXPENSE', parentCode: '6', postable: true, role: 'GASTOS_COMERCIALES' },
 ];
+
+export const BANCO_PARENT_CODE = '1.1.02';
+export const UENO_PYG_CODE = '1.1.02.01';
+export const UENO_USD_CODE = '1.1.02.02';
+
+function normalizeAccountName(name: string) {
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+export function isUenoPygName(name: string) {
+  const n = normalizeAccountName(name);
+  if (n.includes('6193146823')) return true;
+  if (!n.includes('ueno')) return false;
+  if (n.includes('usd') || n.includes('dolar') || n.includes('6113146824')) return false;
+  return true;
+}
+
+export function isUenoUsdName(name: string) {
+  const n = normalizeAccountName(name);
+  if (n.includes('6113146824')) return true;
+  if (!n.includes('ueno')) return false;
+  return n.includes('usd') || n.includes('dolar');
+}
 
 export function nextChildCode(parentCode: string, siblingCodes: string[]): string {
   const prefix = `${parentCode}.`;

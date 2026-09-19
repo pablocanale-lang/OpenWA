@@ -26,9 +26,9 @@ import {
   type Treasury,
 } from '../domain/accounting-posting.js';
 import { prisma } from '../db.js';
-import { splitIva11 } from '../domain/iva.js';
+import { splitIva11, type IvaTreatment } from '../domain/iva.js';
 import { badRequest, notFound } from '../http-error.js';
-import { operationMemo } from '../domain/operation-number.js';
+import { operationMemo, rewriteInvoiceMemo } from '../domain/operation-number.js';
 import { findActiveEntry, postEntry, reverseActive, reverseEntry, rewriteActiveEntry } from './journal.service.js';
 import { addLot, consumeForOrder, removeLotsForPurchaseOrder, restoreForOrder } from './fifo.service.js';
 import { applyOrderReservation, restoreOrderSale } from './stock.service.js';
@@ -53,6 +53,52 @@ async function poRef(tx: Tx, id: string) {
 
 export function saleCloseMemo(ref: string, invoiceNumber?: string | null) {
   return operationMemo('ORDER', 'CLOSE', ref, invoiceNumber);
+}
+
+export async function syncOrderInvoiceMemos(
+  tx: Tx,
+  input: { orderId: string; invoiceNumber: string; previousInvoiceNumber?: string | null },
+) {
+  const { ref } = await orderRef(tx, input.orderId);
+  const payments = await tx.payment.findMany({ where: { orderId: input.orderId }, select: { id: true } });
+  const paymentIds = payments.map((row) => row.id);
+  const entries = await tx.journalEntry.findMany({
+    where: {
+      OR: [
+        { sourceType: JournalSource.ORDER, sourceId: input.orderId },
+        ...(paymentIds.length
+          ? [{ sourceType: JournalSource.PAYMENT, sourceId: { in: paymentIds } }]
+          : []),
+      ],
+    },
+    include: { lines: true },
+  });
+
+  for (const entry of entries) {
+    const nextMemo = rewriteInvoiceMemo(
+      entry.memo,
+      entry.event,
+      ref,
+      input.invoiceNumber,
+      input.previousInvoiceNumber,
+    );
+    if (nextMemo !== entry.memo) {
+      await tx.journalEntry.update({ where: { id: entry.id }, data: { memo: nextMemo } });
+    }
+    for (const line of entry.lines) {
+      if (!line.memo) continue;
+      const nextLine = rewriteInvoiceMemo(
+        line.memo,
+        entry.event,
+        ref,
+        input.invoiceNumber,
+        input.previousInvoiceNumber,
+      );
+      if (nextLine !== line.memo) {
+        await tx.journalLine.update({ where: { id: line.id }, data: { memo: nextLine } });
+      }
+    }
+  }
 }
 
 export async function postOrderPayment(
@@ -464,7 +510,8 @@ export async function postExpenseJournal(
     id: string;
     datedAt: Date;
     gross: number;
-    ivaIncluded: boolean;
+    ivaIncluded?: boolean;
+    ivaTreatment?: IvaTreatment | null;
     expenseRole?: string;
     expenseAccountId?: string;
     treasury: Treasury;
@@ -475,6 +522,7 @@ export async function postExpenseJournal(
   const split = linesExpense({
     gross: input.gross,
     ivaIncluded: input.ivaIncluded,
+    ivaTreatment: input.ivaTreatment,
     expenseRole: input.expenseRole || 'GASTOS_GENERALES',
     treasury: input.treasury,
     memo: input.description,

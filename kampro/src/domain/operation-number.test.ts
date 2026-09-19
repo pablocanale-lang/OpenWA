@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatOpNumber, operationMemo } from './operation-number.js';
+import { formatOpNumber, operationMemo, rewriteInvoiceMemo } from './operation-number.js';
 
 describe('numeración de operaciones', () => {
   it('numera OC, PV y gasto con 6 dígitos', () => {
@@ -15,5 +15,17 @@ describe('numeración de operaciones', () => {
     assert.equal(operationMemo('PURCHASE_ORDER', 'PAY', 'OC-000002'), 'Pago OC-000002');
     assert.equal(operationMemo('PURCHASE_ORDER', 'CLOSE', 'OC-000002'), 'Recepción OC-000002');
     assert.equal(operationMemo('PAYMENT', 'PAY', 'PV-000013'), 'Cobro PV-000013');
+  });
+
+  it('actualiza el concepto cuando cambia el número de factura', () => {
+    assert.equal(
+      rewriteInvoiceMemo('Venta PV-000016 · 001-001-0000015', 'CLOSE', 'PV-000016', '001-001-0000018', '001-001-0000015'),
+      'Venta PV-000016 · 001-001-0000018',
+    );
+    assert.equal(
+      rewriteInvoiceMemo('Flete venta 001-001-0000015', 'SHIPPING', 'PV-000016', '001-001-0000018', '001-001-0000015'),
+      'Flete venta 001-001-0000018',
+    );
+    assert.equal(rewriteInvoiceMemo('CMV PV-000016', 'COGS', 'PV-000016', '001-001-0000018', '001-001-0000015'), 'CMV PV-000016');
   });
 });

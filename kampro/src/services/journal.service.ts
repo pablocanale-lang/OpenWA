@@ -2,6 +2,7 @@ import { CashFlowClass, JournalSource, type Prisma } from '@prisma/client';
 import { prisma } from '../db.js';
 import { badRequest, notFound } from '../http-error.js';
 import { assertBalanced, compactDraftLines, formatJournalNumber, reverseLines, type DraftLine } from '../domain/journal.js';
+import { BANCO_PARENT_CODE } from '../domain/chart-of-accounts.js';
 import { roleIds } from './accounts.service.js';
 
 type Tx = Prisma.TransactionClient;
@@ -23,12 +24,12 @@ async function resolveLines(tx: Tx, lines: DraftLine[]) {
   const compact = compactDraftLines(lines);
   assertBalanced(compact);
   const roles = await roleIds(tx);
-  return compact.map((line, sortOrder) => {
+  const resolved = compact.map((line, sortOrder) => {
     let accountId = line.accountId;
     if (!accountId && line.role) accountId = roles.get(line.role as never);
     if (!accountId) badRequest(`No hay cuenta contable para ${line.role ?? 'esta línea'}`);
     return {
-      accountId,
+      accountId: accountId as string,
       debit: line.debit,
       credit: line.credit,
       memo: line.memo ?? null,
@@ -37,6 +38,15 @@ async function resolveLines(tx: Tx, lines: DraftLine[]) {
       sortOrder,
     };
   });
+  const ids = [...new Set(resolved.map((line) => line.accountId))];
+  const accounts = await tx.account.findMany({ where: { id: { in: ids } } });
+  const byId = new Map(accounts.map((account) => [account.id, account]));
+  for (const line of resolved) {
+    const account = byId.get(line.accountId);
+    if (!account) badRequest('Cuenta inexistente');
+    if (!account.postable) badRequest(`La cuenta ${account.code} ${account.name} no es imputable`);
+  }
+  return resolved;
 }
 
 export async function postEntry(
@@ -355,7 +365,15 @@ export async function financialStatements(from?: Date, to?: Date) {
   const equityTotal = equityRows.reduce((s, a) => s + a.balance, 0);
 
   const treasuryIds = new Set(
-    (await prisma.account.findMany({ where: { role: { in: ['CAJA', 'BANCO'] } } })).map((a) => a.id),
+    (
+      await prisma.account.findMany({
+        where: {
+          active: true,
+          postable: true,
+          OR: [{ role: { in: ['CAJA', 'BANCO'] } }, { parent: { code: BANCO_PARENT_CODE } }],
+        },
+      })
+    ).map((a) => a.id),
   );
   const cashLines = await prisma.journalLine.findMany({
     where: {
@@ -439,6 +457,7 @@ export async function postManual(
   datedAt: Date,
   memo: string,
   lines: Array<{ accountId: string; debit: number; credit: number; memo?: string }>,
+  cashFlow?: CashFlowClass,
 ) {
   if (!memo.trim()) badRequest('El asiento manual necesita una descripción');
   const id = `manual-${Date.now()}`;
@@ -455,6 +474,7 @@ export async function postManual(
         credit: line.credit,
         memo: line.memo,
       })),
+      cashFlow: cashFlow ?? CashFlowClass.OPERATING,
       skipIfExists: false,
     }),
   );

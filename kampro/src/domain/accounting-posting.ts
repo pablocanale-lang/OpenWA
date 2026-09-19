@@ -1,4 +1,4 @@
-import { splitIva11, netIfIncluded } from './iva.js';
+import { resolveIvaTreatment, splitByTreatment, splitIva11, type IvaTreatment } from './iva.js';
 import { compactDraftLines, type DraftLine } from './journal.js';
 
 export type Treasury = 'CAJA' | 'BANCO';
@@ -111,12 +111,13 @@ export function linesPoRefund(amount: number, treasury: Treasury, memo: string):
 
 export function linesExpense(input: {
   gross: number;
-  ivaIncluded: boolean;
+  ivaIncluded?: boolean;
+  ivaTreatment?: IvaTreatment | null;
   expenseRole: string;
   treasury: Treasury;
   memo: string;
 }): DraftLine[] {
-  const { net, iva } = netIfIncluded(input.gross, input.ivaIncluded);
+  const { net, iva } = splitByTreatment(input.gross, resolveIvaTreatment(input));
   return compactDraftLines([
     t(input.expenseRole, net, 0, input.memo),
     t('IVA_CREDITO', iva, 0, input.memo),

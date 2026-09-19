@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import {
   AccountType,
+  CashFlowClass,
   ExpenseKind,
   ImportCostType,
   InvoiceSettlement,
@@ -30,6 +31,7 @@ import * as accounts from '../services/accounts.service.js';
 import * as journal from '../services/journal.service.js';
 import * as expenses from '../services/expenses.service.js';
 import * as accounting from '../services/accounting.service.js';
+import { peekNextInvoice } from '../services/invoice.service.js';
 import { parsePygInput } from '../domain/pyg-input.js';
 import type { OrderAction } from '../domain/order-transitions.js';
 
@@ -724,6 +726,14 @@ export async function apiRoutes(app: FastifyInstance) {
     unitPricePyg: z.number().int().nonnegative().optional(),
   });
 
+  app.get('/invoices/next', async (_req, reply) => {
+    try {
+      return await peekNextInvoice();
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
   app.get('/orders', async (req, reply) => {
     try {
       const query = z
@@ -763,6 +773,7 @@ export async function apiRoutes(app: FastifyInstance) {
           invoiceName: z.string().min(1),
           ruc: z.string().min(1),
           invoiceSettlement: z.nativeEnum(InvoiceSettlement).optional(),
+          invoiceNumber: z.string().min(1).optional(),
           sessionId: z.string().optional(),
           chatId: z.string().optional(),
           locationLat: z.number().optional(),
@@ -798,6 +809,7 @@ export async function apiRoutes(app: FastifyInstance) {
           invoiceName: z.string().min(1).optional(),
           ruc: z.string().min(1).optional(),
           invoiceSettlement: z.nativeEnum(InvoiceSettlement).optional(),
+          invoiceNumber: z.string().min(1).optional(),
           locationLat: z.number().nullable().optional(),
           locationLng: z.number().nullable().optional(),
           locationText: z.string().nullable().optional(),
@@ -826,6 +838,16 @@ export async function apiRoutes(app: FastifyInstance) {
     }
   });
 
+  app.patch('/orders/:id/invoice', async (req, reply) => {
+    try {
+      const { id } = idParam.parse(req.params);
+      const body = z.object({ invoiceNumber: z.string().min(1) }).parse(req.body);
+      return await orders.updateInvoiceNumber(id, body.invoiceNumber);
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
   app.post('/orders/:id/transition', async (req, reply) => {
     try {
       const { id } = idParam.parse(req.params);
@@ -842,9 +864,16 @@ export async function apiRoutes(app: FastifyInstance) {
           ]),
           payment: paymentBody.optional(),
           shippingCostPyg: pygAmount.optional(),
+          invoiceNumber: z.string().min(1).optional(),
         })
         .parse(req.body);
-      return await orders.transitionOrder(id, body.action as OrderAction, body.payment, body.shippingCostPyg);
+      return await orders.transitionOrder(
+        id,
+        body.action as OrderAction,
+        body.payment,
+        body.shippingCostPyg,
+        body.invoiceNumber,
+      );
     } catch (err) {
       return sendError(reply, err);
     }
@@ -948,6 +977,7 @@ export async function apiRoutes(app: FastifyInstance) {
         .object({
           datedAt: z.coerce.date(),
           memo: z.string().min(1),
+          cashFlow: z.nativeEnum(CashFlowClass).optional(),
           lines: z
             .array(
               z.object({
@@ -960,7 +990,7 @@ export async function apiRoutes(app: FastifyInstance) {
             .min(2),
         })
         .parse(req.body);
-      return await journal.postManual(body.datedAt, body.memo, body.lines);
+      return await journal.postManual(body.datedAt, body.memo, body.lines, body.cashFlow);
     } catch (err) {
       return sendError(reply, err);
     }
@@ -982,6 +1012,7 @@ export async function apiRoutes(app: FastifyInstance) {
           datedAt: z.coerce.date(),
           description: z.string().min(1),
           amountGrossPyg: z.preprocess((value) => parsePygInput(value), z.number().int().positive()),
+          ivaTreatment: z.enum(['IVA_10', 'IVA_5', 'EXENTA']).optional(),
           ivaIncluded: z.boolean().optional(),
           treasury: z.nativeEnum(TreasuryAccount),
           accountId: z.string().min(1).optional(),
@@ -1008,6 +1039,7 @@ export async function apiRoutes(app: FastifyInstance) {
               (value) => (value === undefined ? undefined : parsePygInput(value)),
               z.number().int().positive().optional(),
             ),
+          ivaTreatment: z.enum(['IVA_10', 'IVA_5', 'EXENTA']).optional(),
           ivaIncluded: z.boolean().optional(),
           treasury: z.nativeEnum(TreasuryAccount).optional(),
           accountId: z.string().min(1).optional(),

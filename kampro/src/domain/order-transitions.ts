@@ -50,6 +50,11 @@ export function canEditOrderDetails(status: OrderStatus): boolean {
   return !isTerminalOrder(status);
 }
 
+/** El número de talonario se puede corregir o cargar también en cancelados y devueltos. */
+export function canEditInvoiceNumber(_status: OrderStatus): boolean {
+  return true;
+}
+
 export function canEditCommercial(status: OrderStatus, _hasConfirmedPayment: boolean): boolean {
   return !isTerminalOrder(status);
 }

@@ -14,6 +14,7 @@ import {
   assertOrderTransition,
   canCancelOrder,
   canEditCommercial,
+  canEditInvoiceNumber,
   canEditOrderDetails,
   assertShippingLoadedForClose,
   canEditShippingCost,
@@ -26,10 +27,11 @@ import {
   type OrderStatus as DomainStatus,
   type OrderZone as DomainZone,
 } from '../domain/order-transitions.js';
+import { normalizeInvoiceNumber } from '../domain/invoice-number.js';
 import { resolveOrderLines, summarizeLines, type OrderLineInput } from './order-lines.js';
 import { notifySalesGroup, type SalesNotifyResult } from './openwa.service.js';
 import { applyOrderReservation, consumeOrderSale, releaseOrderReservation, restoreOrderSale } from './stock.service.js';
-import { allocateInvoice } from './invoice.service.js';
+import { allocateInvoice, applyInvoiceNumber, peekNextInvoice } from './invoice.service.js';
 import { allocateOpNumber } from './operation-numbers.service.js';
 import { reverseActive } from './journal.service.js';
 import {
@@ -39,6 +41,7 @@ import {
   postShippingCost,
   reverseOrderClose,
   syncClosedOrderJournals,
+  syncOrderInvoiceMemos,
 } from './accounting.service.js';
 
 const orderInclude = {
@@ -169,7 +172,10 @@ function presentItems(order: OrderRow) {
   ];
 }
 
-function present(order: OrderRow, extra?: { salesNotify?: SalesNotifyResult }) {
+function present(
+  order: OrderRow,
+  extra?: { salesNotify?: SalesNotifyResult; suggestedInvoiceNumber?: string },
+) {
   const confirmed = hasConfirmedPayment(order.payments);
   const status = asStatus(order.status);
   return {
@@ -179,11 +185,18 @@ function present(order: OrderRow, extra?: { salesNotify?: SalesNotifyResult }) {
     canCancel: canCancelOrder(status, confirmed),
     canReturn: canReturnOrder(status, confirmed),
     canEditDetails: canEditOrderDetails(status),
+    canEditInvoice: canEditInvoiceNumber(status),
     canEditCommercial: canEditCommercial(status, confirmed),
     canEditShipping: canEditShippingCost(status),
     netPaid: netPaidAmount(order.payments),
+    suggestedInvoiceNumber: extra?.suggestedInvoiceNumber ?? null,
     ...(extra?.salesNotify ? { salesNotify: extra.salesNotify } : {}),
   };
+}
+
+async function presentOrder(order: OrderRow, extra?: { salesNotify?: SalesNotifyResult }) {
+  const next = await peekNextInvoice();
+  return present(order, { ...extra, suggestedInvoiceNumber: next.invoiceNumber });
 }
 
 export async function listOrders(filters?: { phone?: string; chatId?: string }) {
@@ -191,18 +204,21 @@ export async function listOrders(filters?: { phone?: string; chatId?: string }) 
   if (filters?.phone?.trim()) ors.push({ customerPhone: filters.phone.trim() });
   if (filters?.chatId?.trim()) ors.push({ chatId: filters.chatId.trim() });
 
-  const orders = await prisma.order.findMany({
-    where: ors.length === 0 ? undefined : ors.length === 1 ? ors[0] : { OR: ors },
-    include: orderInclude,
-    orderBy: { createdAt: 'desc' },
-  });
-  return orders.map((order) => present(order));
+  const [orders, next] = await Promise.all([
+    prisma.order.findMany({
+      where: ors.length === 0 ? undefined : ors.length === 1 ? ors[0] : { OR: ors },
+      include: orderInclude,
+      orderBy: { createdAt: 'desc' },
+    }),
+    peekNextInvoice(),
+  ]);
+  return orders.map((order) => present(order, { suggestedInvoiceNumber: next.invoiceNumber }));
 }
 
 export async function getOrder(id: string) {
   const order = await prisma.order.findUnique({ where: { id }, include: orderInclude });
   if (!order) notFound('Pedido');
-  return present(order);
+  return presentOrder(order);
 }
 
 export type CreateOrderInput = {
@@ -218,6 +234,7 @@ export type CreateOrderInput = {
   invoiceName: string;
   ruc: string;
   invoiceSettlement?: InvoiceSettlement;
+  invoiceNumber?: string | null;
   sessionId?: string;
   chatId?: string;
   locationLat?: number | null;
@@ -246,6 +263,9 @@ export async function createOrder(input: CreateOrderInput) {
   }
 
   const created = await prisma.$transaction(async (tx) => {
+    const invoice = input.invoiceNumber?.trim()
+      ? await applyInvoiceNumber(tx, { invoiceNumber: input.invoiceNumber })
+      : null;
     const allocated = await allocateOpNumber(tx, 'order');
     const order = await tx.order.create({
       data: {
@@ -263,6 +283,9 @@ export async function createOrder(input: CreateOrderInput) {
         invoiceName: input.invoiceName.trim(),
         ruc,
         invoiceSettlement: input.invoiceSettlement ?? InvoiceSettlement.CONTADO,
+        invoiceNumber: invoice?.invoiceNumber ?? null,
+        invoiceIssuer: invoice?.invoiceIssuer ?? null,
+        invoiceIssuedAt: invoice?.invoiceIssuedAt ?? null,
         status: initialStatusForZone(asZone(input.zone)),
         sessionId: input.sessionId || null,
         chatId: input.chatId || null,
@@ -303,7 +326,7 @@ export async function createOrder(input: CreateOrderInput) {
     }
   }
 
-  return present(created, { salesNotify });
+  return presentOrder(created, { salesNotify });
 }
 
 export type UpdateOrderInput = {
@@ -317,6 +340,7 @@ export type UpdateOrderInput = {
   invoiceName?: string;
   ruc?: string;
   invoiceSettlement?: InvoiceSettlement;
+  invoiceNumber?: string | null;
   locationLat?: number | null;
   locationLng?: number | null;
   locationText?: string | null;
@@ -329,6 +353,18 @@ export type UpdateOrderInput = {
 
 function isShippingOnlyPatch(input: UpdateOrderInput): boolean {
   return Object.entries(input).every(([key, value]) => value === undefined || key === 'shippingCostPyg');
+}
+
+function isInvoiceOnlyPatch(input: UpdateOrderInput): boolean {
+  return Object.entries(input).every(([key, value]) => value === undefined || key === 'invoiceNumber');
+}
+
+function parseInvoiceOrBadRequest(raw: string): string {
+  try {
+    return normalizeInvoiceNumber(raw);
+  } catch (err) {
+    badRequest(err instanceof Error ? err.message : 'Número de factura inválido');
+  }
 }
 
 export async function updateShippingCost(id: string, shippingCostPyg: number | null) {
@@ -348,12 +384,57 @@ export async function updateShippingCost(id: string, shippingCostPyg: number | n
     await postShippingCost(tx, id, next, new Date());
     return row;
   });
-  return present(updated);
+  return presentOrder(updated);
+}
+
+export async function updateInvoiceNumber(id: string, raw: string) {
+  const order = await prisma.order.findUnique({ where: { id }, include: orderInclude });
+  if (!order) notFound('Pedido');
+  if (!canEditInvoiceNumber(asStatus(order.status))) {
+    badRequest('Este pedido ya no admite cambios de factura');
+  }
+  const invoiceNumber = parseInvoiceOrBadRequest(raw);
+  if (order.invoiceNumber === invoiceNumber) return presentOrder(order);
+
+  const previousInvoiceNumber = order.invoiceNumber;
+  const updated = await prisma.$transaction(async (tx) => {
+    const invoice = await applyInvoiceNumber(tx, { invoiceNumber, excludeOrderId: id });
+    const updatedOrder = await tx.order.update({
+      where: { id },
+      data: {
+        invoiceNumber: invoice.invoiceNumber,
+        invoiceIssuer: order.invoiceIssuer || invoice.invoiceIssuer,
+        invoiceIssuedAt: order.invoiceIssuedAt ?? invoice.invoiceIssuedAt,
+      },
+      include: orderInclude,
+    });
+    await syncOrderInvoiceMemos(tx, {
+      orderId: id,
+      invoiceNumber: invoice.invoiceNumber,
+      previousInvoiceNumber,
+    });
+    if (updatedOrder.status === OrderStatus.CERRADO) {
+      await syncClosedOrderJournals(tx, {
+        orderId: id,
+        gross: updatedOrder.totalAmount,
+        prepaid: netPaidAmount(updatedOrder.payments),
+        settlement: updatedOrder.invoiceSettlement,
+        invoiceNumber: updatedOrder.invoiceNumber,
+        items: presentItems(updatedOrder),
+        rebuildLots: false,
+      });
+    }
+    return updatedOrder;
+  });
+  return presentOrder(updated);
 }
 
 export async function updateOrder(id: string, input: UpdateOrderInput) {
   if (input.shippingCostPyg !== undefined && isShippingOnlyPatch(input)) {
     return updateShippingCost(id, input.shippingCostPyg);
+  }
+  if (input.invoiceNumber != null && isInvoiceOnlyPatch(input)) {
+    return updateInvoiceNumber(id, input.invoiceNumber);
   }
 
   const order = await prisma.order.findUnique({ where: { id }, include: orderInclude });
@@ -438,6 +519,15 @@ export async function updateOrder(id: string, input: UpdateOrderInput) {
       }
     }
 
+    const requestedInvoice =
+      input.invoiceNumber != null && input.invoiceNumber.trim()
+        ? parseInvoiceOrBadRequest(input.invoiceNumber)
+        : null;
+    const invoice =
+      requestedInvoice && requestedInvoice !== order.invoiceNumber
+        ? await applyInvoiceNumber(tx, { invoiceNumber: requestedInvoice, excludeOrderId: id })
+        : null;
+
     const updatedOrder = await tx.order.update({
       where: { id },
       data: {
@@ -452,6 +542,13 @@ export async function updateOrder(id: string, input: UpdateOrderInput) {
         invoiceName,
         ruc,
         invoiceSettlement: input.invoiceSettlement,
+        ...(invoice
+          ? {
+              invoiceNumber: invoice.invoiceNumber,
+              invoiceIssuer: order.invoiceIssuer || invoice.invoiceIssuer,
+              invoiceIssuedAt: order.invoiceIssuedAt ?? invoice.invoiceIssuedAt,
+            }
+          : {}),
         locationLat:
           nextZone === OrderZone.ASUNCION
             ? input.locationLat !== undefined
@@ -485,7 +582,10 @@ export async function updateOrder(id: string, input: UpdateOrderInput) {
     }
     if (
       updatedOrder.status === OrderStatus.CERRADO &&
-      (lines || input.invoiceSettlement !== undefined || input.totalAmount !== undefined)
+      (lines ||
+        input.invoiceSettlement !== undefined ||
+        input.totalAmount !== undefined ||
+        invoice)
     ) {
       await syncClosedOrderJournals(tx, {
         orderId: id,
@@ -500,7 +600,7 @@ export async function updateOrder(id: string, input: UpdateOrderInput) {
     return updatedOrder;
   });
 
-  return present(updated);
+  return presentOrder(updated);
 }
 
 export type PaymentInput = {
@@ -515,6 +615,7 @@ export async function transitionOrder(
   action: OrderAction,
   payment?: PaymentInput,
   shippingCostPyg?: number,
+  invoiceNumber?: string | null,
 ) {
   const order = await prisma.order.findUnique({ where: { id }, include: orderInclude });
   if (!order) notFound('Pedido');
@@ -595,7 +696,7 @@ export async function transitionOrder(
     }
 
     const invoice = shouldIssueInvoice(order.zone, action, order.invoiceNumber)
-      ? await allocateInvoice(tx)
+      ? await allocateInvoice(tx, invoiceNumber)
       : null;
 
     return tx.order.update({
@@ -632,7 +733,7 @@ export async function transitionOrder(
     }
   }
 
-  return present(updated, { salesNotify });
+  return presentOrder(updated, { salesNotify });
 }
 
 export async function setOrderStatus(id: string, next: OrderStatus) {
@@ -640,7 +741,7 @@ export async function setOrderStatus(id: string, next: OrderStatus) {
   if (!order) notFound('Pedido');
   const current = asStatus(order.status);
   const target = asStatus(next);
-  if (current === target) return present(order);
+  if (current === target) return presentOrder(order);
 
   const confirmed = hasConfirmedPayment(order.payments);
   const updated = await prisma.$transaction(async (tx) => {
@@ -692,5 +793,5 @@ export async function setOrderStatus(id: string, next: OrderStatus) {
       include: orderInclude,
     });
   });
-  return present(updated);
+  return presentOrder(updated);
 }
