@@ -28,12 +28,15 @@ export function parsePygInput(raw: unknown): number {
   return Number.isFinite(value) ? Math.round(value) : Number.NaN;
 }
 
+export type OrderLineIvaTreatment = 'IVA_10' | 'IVA_5' | 'EXENTA';
+
 export type OrderLineDraft = {
   key: string;
   sku: string;
   quantity: number;
   discount: number;
   unitPrice: number;
+  ivaTreatment: OrderLineIvaTreatment;
 };
 
 export function lineTotalPyg(line: Pick<OrderLineDraft, 'unitPrice' | 'quantity' | 'discount'>): number {

@@ -16,7 +16,14 @@ import {
   type UpdateOrderPayload,
 } from '../../services/kamproApi';
 import { latestIncomingLocation, type LocationPin } from '../../utils/chatLocation';
-import { formatPyg, parsePygInput, sanitizeRucInput, toDatetimeLocalValue, type OrderLineDraft } from '../../utils/orderPricing';
+import {
+  formatPyg,
+  parsePygInput,
+  sanitizeRucInput,
+  toDatetimeLocalValue,
+  type OrderLineDraft,
+  type OrderLineIvaTreatment,
+} from '../../utils/orderPricing';
 import { useRole } from '../../hooks/useRole';
 import { useToast } from '../../hooks/useToast';
 import { Modal } from '../Modal';
@@ -36,7 +43,14 @@ function composeTemplate(t: { header?: string | null; body: string; footer?: str
 }
 
 function linesFromOrder(order: KamproOrder): OrderLineDraft[] {
-  const source: Array<{ id?: string; sku: string; quantity: number; discountApplied: number; unitPricePyg: number }> =
+  const source: Array<{
+    id?: string;
+    sku: string;
+    quantity: number;
+    discountApplied: number;
+    unitPricePyg: number;
+    ivaTreatment?: OrderLineIvaTreatment;
+  }> =
     order.items && order.items.length > 0
       ? order.items
       : [
@@ -56,6 +70,7 @@ function linesFromOrder(order: KamproOrder): OrderLineDraft[] {
     quantity: item.quantity,
     discount: item.discountApplied,
     unitPrice: item.unitPricePyg,
+    ivaTreatment: item.ivaTreatment ?? 'IVA_10',
   }));
 }
 
@@ -160,6 +175,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
           quantity: line.quantity,
           discountApplied: line.discount,
           unitPricePyg: line.unitPrice,
+          ivaTreatment: line.ivaTreatment,
         }));
       }
       if (order.zone === 'ASUNCION') {

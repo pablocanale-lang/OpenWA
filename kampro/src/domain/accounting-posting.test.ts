@@ -21,7 +21,12 @@ describe('armado de asientos', () => {
   });
 
   it('cierre al contado con cobro previo desafecta anticipo y reconoce venta neta + IVA', () => {
-    const lines = linesSaleRecognition({ gross: 110_000, settlement: 'CONTADO', prepaid: 110_000, memo: 'cierre' });
+    const lines = linesSaleRecognition({
+      lines: [{ grossPyg: 110_000, ivaTreatment: 'IVA_10' }],
+      settlement: 'CONTADO',
+      prepaid: 110_000,
+      memo: 'cierre',
+    });
     assert.equal(lineTotals(lines).debit, 110_000);
     assert.ok(lines.some((l) => l.role === 'VENTAS' && l.credit === 100_000));
     assert.ok(lines.some((l) => l.role === 'IVA_DEBITO' && l.credit === 10_000));
@@ -29,16 +34,55 @@ describe('armado de asientos', () => {
   });
 
   it('cierre a crédito deja cuenta por cobrar', () => {
-    const lines = linesSaleRecognition({ gross: 110_000, settlement: 'CREDITO', prepaid: 0, memo: 'cierre' });
+    const lines = linesSaleRecognition({
+      lines: [{ grossPyg: 110_000, ivaTreatment: 'IVA_10' }],
+      settlement: 'CREDITO',
+      prepaid: 0,
+      memo: 'cierre',
+    });
     assert.ok(lines.some((l) => l.role === 'CXC' && l.debit === 110_000));
   });
 
   it('crédito con anticipo reclasifica el cobro a CxC', () => {
-    const lines = linesSaleRecognition({ gross: 110_000, settlement: 'CREDITO', prepaid: 50_000, memo: 'cierre' });
+    const lines = linesSaleRecognition({
+      lines: [{ grossPyg: 110_000, ivaTreatment: 'IVA_10' }],
+      settlement: 'CREDITO',
+      prepaid: 50_000,
+      memo: 'cierre',
+    });
     assert.equal(lineTotals(lines).debit, lineTotals(lines).credit);
     assert.ok(lines.some((l) => l.role === 'CXC' && l.debit === 110_000));
     assert.ok(lines.some((l) => l.role === 'ANTICIPO_CLIENTES' && l.debit === 50_000));
     assert.ok(lines.some((l) => l.role === 'CXC' && l.credit === 50_000));
+  });
+
+  it('pedido con líneas mixtas: solo las líneas 10%/5% aportan IVA_DEBITO', () => {
+    const lines = linesSaleRecognition({
+      lines: [
+        { grossPyg: 110_000, ivaTreatment: 'IVA_10' }, // net 100.000 + iva 10.000
+        { grossPyg: 105_000, ivaTreatment: 'IVA_5' }, // net 100.000 + iva 5.000
+        { grossPyg: 50_000, ivaTreatment: 'EXENTA' }, // net 50.000 + iva 0
+      ],
+      settlement: 'CONTADO',
+      prepaid: 0,
+      memo: 'cierre mixto',
+    });
+    assert.equal(lineTotals(lines).debit, lineTotals(lines).credit);
+    assert.ok(lines.some((l) => l.role === 'VENTAS' && l.credit === 250_000));
+    assert.ok(lines.some((l) => l.role === 'IVA_DEBITO' && l.credit === 15_000));
+    assert.ok(lines.some((l) => l.role === 'CXC' && l.debit === 265_000));
+  });
+
+  it('pedido 100% EXENTA no postea ninguna línea de IVA_DEBITO', () => {
+    const lines = linesSaleRecognition({
+      lines: [{ grossPyg: 640_000, ivaTreatment: 'EXENTA' }],
+      settlement: 'CONTADO',
+      prepaid: 0,
+      memo: 'venta talonario prestado',
+    });
+    assert.ok(lines.some((l) => l.role === 'VENTAS' && l.credit === 640_000));
+    assert.ok(!lines.some((l) => l.role === 'IVA_DEBITO'));
+    assert.equal(lineTotals(lines).debit, lineTotals(lines).credit);
   });
 
   it('retención de IVA va a crédito fiscal y cierra el anticipo', () => {

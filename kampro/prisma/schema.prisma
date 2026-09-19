@@ -443,17 +443,26 @@ model ChatFollowUp {
   @@index([sessionId])
 }
 
+enum OrderLineIvaTreatment {
+  IVA_10
+  IVA_5
+  EXENTA
+}
+
 model OrderLine {
-  id               String   @id @default(cuid())
+  id               String                @id @default(cuid())
   orderId          String
   sku              String
   productName      String
   quantity         Int
   unitPricePyg     Int
-  discountApplied  Int      @default(0)
+  discountApplied  Int                   @default(0)
   lineTotal        Int
-  sortOrder        Int      @default(0)
-  createdAt        DateTime @default(now())
+  /// Tratamiento de IVA de esta línea para el asiento de venta. Default IVA_10 = comportamiento
+  /// histórico (splitIva11 sobre todo el bruto). No confundir con Expense.ivaTreatment.
+  ivaTreatment     OrderLineIvaTreatment @default(IVA_10)
+  sortOrder        Int                   @default(0)
+  createdAt        DateTime              @default(now())
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 

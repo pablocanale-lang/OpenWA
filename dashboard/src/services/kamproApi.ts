@@ -245,6 +245,7 @@ export type KamproOrderLine = {
   unitPricePyg: number;
   discountApplied: number;
   lineTotal: number;
+  ivaTreatment: 'IVA_10' | 'IVA_5' | 'EXENTA';
   sortOrder: number;
 };
 
@@ -302,6 +303,7 @@ export type CreateOrderLinePayload = {
   quantity: number;
   discountApplied: number;
   unitPricePyg: number;
+  ivaTreatment?: 'IVA_10' | 'IVA_5' | 'EXENTA';
 };
 
 export type CreateOrderPayload = {

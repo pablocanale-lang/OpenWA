@@ -1193,7 +1193,8 @@
       "invoiceHint": "Sigue a la última factura. Cambiá el número si hay facturas anuladas.",
       "settlement": "Condición de factura",
       "cashSale": "Contado",
-      "creditSale": "Crédito"
+      "creditSale": "Crédito",
+      "ivaTreatment": "IVA"
     },
     "closeShippingHint": "Para cerrar hay que cargar lo que se gastó en el envío. Con ese monto se genera el asiento de flete.",
     "closeShippingRequired": "Cargá el costo de envío para cerrar el pedido",
@@ -1260,6 +1261,11 @@
     "zoneShort": {
       "asuncion": "Asunción",
       "interior": "Interior"
+    },
+    "ivaTreatment": {
+      "IVA_10": "IVA 10%",
+      "IVA_5": "IVA 5%",
+      "EXENTA": "Exenta"
     }
   },
   "inventory": {

@@ -41,19 +41,34 @@ export function linesCreditCollection(amount: number, treasury: Treasury, memo: 
   ]);
 }
 
+/** Une el neto y el IVA de cada línea. Una línea EXENTA aporta iva=0 (splitByTreatment). */
+function sumLineSplits(lines: Array<{ grossPyg: number; ivaTreatment: IvaTreatment }>) {
+  return lines.reduce(
+    (acc, line) => {
+      const { net, iva } = splitByTreatment(line.grossPyg, line.ivaTreatment);
+      acc.gross += line.grossPyg;
+      acc.net += net;
+      acc.iva += iva;
+      return acc;
+    },
+    { gross: 0, net: 0, iva: 0 },
+  );
+}
+
 export function linesSaleRecognition(input: {
-  gross: number;
+  lines: Array<{ grossPyg: number; ivaTreatment: IvaTreatment }>;
   settlement: Settlement;
   prepaid: number;
   memo: string;
 }): DraftLine[] {
-  const { net, iva } = splitIva11(input.gross);
-  const prepaid = Math.max(0, Math.min(input.prepaid, input.gross));
-  const unpaid = input.gross - prepaid;
+  const { gross, net, iva } = sumLineSplits(input.lines);
+  const prepaid = Math.max(0, Math.min(input.prepaid, gross));
+  const unpaid = gross - prepaid;
+  // Si todas las líneas son EXENTA, iva=0 y compactDraftLines descarta sola la línea IVA_DEBITO.
   const lines: DraftLine[] = [t('VENTAS', 0, net, input.memo), t('IVA_DEBITO', 0, iva, input.memo)];
 
   if (input.settlement === 'CREDITO') {
-    lines.unshift(t('CXC', input.gross, 0, input.memo));
+    lines.unshift(t('CXC', gross, 0, input.memo));
     if (prepaid > 0) {
       lines.push(t('ANTICIPO_CLIENTES', prepaid, 0, input.memo), t('CXC', 0, prepaid, input.memo));
     }

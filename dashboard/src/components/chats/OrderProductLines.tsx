@@ -44,6 +44,7 @@ export function addProductLine(lines: OrderLineDraft[], product: KamproProduct):
       quantity: 1,
       discount: 0,
       unitPrice: product.unitPricePyg ?? 0,
+      ivaTreatment: 'IVA_10',
     },
   ];
 }
@@ -184,6 +185,18 @@ export function OrderProductLines({ products, lines, disabled, onChange }: Props
                       disabled={disabled}
                       onChange={e => updateLine(line.key, { discount: Number(e.target.value) || 0 })}
                     />
+                  </label>
+                  <label>
+                    {t('orders.fields.ivaTreatment')}
+                    <select
+                      value={line.ivaTreatment}
+                      disabled={disabled}
+                      onChange={e => updateLine(line.key, { ivaTreatment: e.target.value as OrderLineDraft['ivaTreatment'] })}
+                    >
+                      <option value="IVA_10">{t('orders.ivaTreatment.IVA_10')}</option>
+                      <option value="IVA_5">{t('orders.ivaTreatment.IVA_5')}</option>
+                      <option value="EXENTA">{t('orders.ivaTreatment.EXENTA')}</option>
+                    </select>
                   </label>
                 </div>
                 <p className="order-quick-panel__quote">

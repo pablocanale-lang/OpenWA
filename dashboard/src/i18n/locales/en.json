@@ -1193,7 +1193,8 @@
       "invoiceHint": "Follows the last invoice. Change it if a number was voided.",
       "settlement": "Invoice terms",
       "cashSale": "Cash",
-      "creditSale": "Credit"
+      "creditSale": "Credit",
+      "ivaTreatment": "VAT"
     },
     "closeShippingHint": "Closing requires the shipping cost Kampro paid. That amount posts the freight journal entry.",
     "closeShippingRequired": "Enter the shipping cost to close the order",
@@ -1260,6 +1261,11 @@
     "zoneShort": {
       "asuncion": "Asunción",
       "interior": "Interior"
+    },
+    "ivaTreatment": {
+      "IVA_10": "VAT 10%",
+      "IVA_5": "VAT 5%",
+      "EXENTA": "Exempt"
     }
   },
   "inventory": {

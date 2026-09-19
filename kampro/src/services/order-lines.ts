@@ -1,4 +1,5 @@
 import { discountPercentForQty, quoteTotalPyg } from '../domain/order-pricing.js';
+import { resolveIvaTreatment, type IvaTreatment } from '../domain/iva.js';
 import { badRequest } from '../http-error.js';
 import { prisma } from '../db.js';
 
@@ -7,6 +8,8 @@ export type OrderLineInput = {
   quantity: number;
   discountApplied?: number;
   unitPricePyg?: number;
+  /// Default IVA_10 (comportamiento histórico) cuando no se especifica.
+  ivaTreatment?: IvaTreatment;
 };
 
 export type ResolvedOrderLine = {
@@ -16,6 +19,7 @@ export type ResolvedOrderLine = {
   unitPricePyg: number;
   discountApplied: number;
   lineTotal: number;
+  ivaTreatment: IvaTreatment;
   sortOrder: number;
 };
 
@@ -65,6 +69,7 @@ export async function resolveOrderLines(input: {
     }
     if (product.status !== 'ACTIVE') badRequest(`El producto ${product.sku} está inactivo`);
     const lineTotal = quoteTotalPyg(unitPricePyg, quantity, discountApplied);
+    const ivaTreatment = resolveIvaTreatment({ ivaTreatment: row.ivaTreatment });
     lines.push({
       sku: product.sku,
       productName: product.name,
@@ -72,6 +77,7 @@ export async function resolveOrderLines(input: {
       unitPricePyg,
       discountApplied,
       lineTotal,
+      ivaTreatment,
       sortOrder: index,
     });
   }

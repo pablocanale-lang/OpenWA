@@ -166,12 +166,16 @@ export async function postOrderRefund(
   });
 }
 
+async function orderLineSplits(tx: Tx, orderId: string) {
+  const rows = await tx.orderLine.findMany({ where: { orderId }, select: { lineTotal: true, ivaTreatment: true } });
+  return rows.map((row) => ({ grossPyg: row.lineTotal, ivaTreatment: row.ivaTreatment as IvaTreatment }));
+}
+
 export async function postOrderClose(
   tx: Tx,
   input: {
     orderId: string;
     datedAt: Date;
-    gross: number;
     prepaid: number;
     settlement: InvoiceSettlement;
     invoiceNumber?: string | null;
@@ -181,7 +185,7 @@ export async function postOrderClose(
   const { ref, invoiceNumber } = await orderRef(tx, input.orderId);
   const saleMemo = saleCloseMemo(ref, input.invoiceNumber ?? invoiceNumber);
   const saleLines = linesSaleRecognition({
-    gross: input.gross,
+    lines: await orderLineSplits(tx, input.orderId),
     settlement: input.settlement as Settlement,
     prepaid: input.prepaid,
     memo: saleMemo,
@@ -243,7 +247,6 @@ export async function syncClosedOrderJournals(
   tx: Tx,
   input: {
     orderId: string;
-    gross: number;
     prepaid: number;
     settlement: InvoiceSettlement;
     invoiceNumber?: string | null;
@@ -262,7 +265,7 @@ export async function syncClosedOrderJournals(
     sourceId: input.orderId,
     event: 'CLOSE',
     lines: linesSaleRecognition({
-      gross: input.gross,
+      lines: await orderLineSplits(tx, input.orderId),
       settlement: input.settlement as Settlement,
       prepaid: input.prepaid,
       memo: saleMemo,

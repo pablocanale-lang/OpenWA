@@ -724,6 +724,7 @@ export async function apiRoutes(app: FastifyInstance) {
     quantity: z.number().int().positive(),
     discountApplied: z.number().min(0).max(100).optional(),
     unitPricePyg: z.number().int().nonnegative().optional(),
+    ivaTreatment: z.enum(['IVA_10', 'IVA_5', 'EXENTA']).optional(),
   });
 
   app.get('/invoices/next', async (_req, reply) => {

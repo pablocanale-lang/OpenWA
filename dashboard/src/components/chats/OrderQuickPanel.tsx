@@ -166,6 +166,7 @@ export function OrderQuickPanel({
           quantity: line.quantity,
           discountApplied: line.discount,
           unitPricePyg: line.unitPrice,
+          ivaTreatment: line.ivaTreatment,
         })),
         zone,
         customerPhone: phoneDigits,

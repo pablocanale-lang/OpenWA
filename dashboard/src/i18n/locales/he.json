@@ -1193,7 +1193,8 @@
       "invoiceHint": "Follows the last invoice. Change it if a number was voided.",
       "settlement": "Invoice terms",
       "cashSale": "Cash",
-      "creditSale": "Credit"
+      "creditSale": "Credit",
+      "ivaTreatment": "VAT"
     },
     "closeShippingHint": "Closing requires the shipping cost Kampro paid. That amount posts the freight journal entry.",
     "closeShippingRequired": "Enter the shipping cost to close the order",
@@ -1269,7 +1270,12 @@
     "addProduct": "Add product",
     "removeProduct": "Remove product",
     "moreActions": "More actions",
-    "setStatus": "Change stage"
+    "setStatus": "Change stage",
+    "ivaTreatment": {
+      "IVA_10": "VAT 10%",
+      "IVA_5": "VAT 5%",
+      "EXENTA": "Exempt"
+    }
   },
   "inventory": {
     "subtitle": "Available units and sale prices. Orders take the price from here and deduct stock on create. Cancel, refund or return puts units back.",

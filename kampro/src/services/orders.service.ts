@@ -304,6 +304,7 @@ export async function createOrder(input: CreateOrderInput) {
             unitPricePyg: line.unitPricePyg,
             discountApplied: line.discountApplied,
             lineTotal: line.lineTotal,
+            ivaTreatment: line.ivaTreatment,
             sortOrder: line.sortOrder,
           })),
         },
@@ -416,7 +417,6 @@ export async function updateInvoiceNumber(id: string, raw: string) {
     if (updatedOrder.status === OrderStatus.CERRADO) {
       await syncClosedOrderJournals(tx, {
         orderId: id,
-        gross: updatedOrder.totalAmount,
         prepaid: netPaidAmount(updatedOrder.payments),
         settlement: updatedOrder.invoiceSettlement,
         invoiceNumber: updatedOrder.invoiceNumber,
@@ -508,6 +508,7 @@ export async function updateOrder(id: string, input: UpdateOrderInput) {
           unitPricePyg: line.unitPricePyg,
           discountApplied: line.discountApplied,
           lineTotal: line.lineTotal,
+          ivaTreatment: line.ivaTreatment,
           sortOrder: line.sortOrder,
         })),
       });
@@ -589,7 +590,6 @@ export async function updateOrder(id: string, input: UpdateOrderInput) {
     ) {
       await syncClosedOrderJournals(tx, {
         orderId: id,
-        gross: updatedOrder.totalAmount,
         prepaid: netPaidAmount(updatedOrder.payments),
         settlement: updatedOrder.invoiceSettlement,
         invoiceNumber: updatedOrder.invoiceNumber,
@@ -687,7 +687,6 @@ export async function transitionOrder(
       await postOrderClose(tx, {
         orderId: id,
         datedAt: new Date(),
-        gross: order.totalAmount,
         prepaid: netPaidAmount(order.payments) + (needsPayment && payment ? Math.round(payment.amount) : 0),
         settlement: order.invoiceSettlement,
         invoiceNumber: order.invoiceNumber,
@@ -763,7 +762,6 @@ export async function setOrderStatus(id: string, next: OrderStatus) {
       await postOrderClose(tx, {
         orderId: id,
         datedAt: new Date(),
-        gross: order.totalAmount,
         prepaid: netPaidAmount(order.payments),
         settlement: order.invoiceSettlement,
         invoiceNumber: order.invoiceNumber,
