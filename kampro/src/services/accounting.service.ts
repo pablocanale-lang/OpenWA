@@ -226,7 +226,13 @@ export async function reverseOrderClose(tx: Tx, orderId: string, datedAt: Date) 
   await reverseActive(tx, JournalSource.ORDER, orderId, 'CLOSE', datedAt);
 }
 
-export async function postShippingCost(tx: Tx, orderId: string, amountPyg: number | null, datedAt: Date) {
+export async function postShippingCost(
+  tx: Tx,
+  orderId: string,
+  amountPyg: number | null,
+  datedAt: Date,
+  ivaTreatment: IvaTreatment = 'IVA_10',
+) {
   if (amountPyg == null || amountPyg < 1) {
     await reverseActive(tx, JournalSource.ORDER, orderId, 'SHIPPING', datedAt);
     return null;
@@ -239,7 +245,7 @@ export async function postShippingCost(tx: Tx, orderId: string, amountPyg: numbe
     sourceType: JournalSource.ORDER,
     sourceId: orderId,
     event: 'SHIPPING',
-    lines: linesShippingPaid(amountPyg, text),
+    lines: linesShippingPaid(amountPyg, text, ivaTreatment),
   });
 }
 

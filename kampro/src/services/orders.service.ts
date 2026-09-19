@@ -28,6 +28,7 @@ import {
   type OrderZone as DomainZone,
 } from '../domain/order-transitions.js';
 import { normalizeInvoiceNumber } from '../domain/invoice-number.js';
+import type { IvaTreatment } from '../domain/iva.js';
 import { resolveOrderLines, summarizeLines, type OrderLineInput } from './order-lines.js';
 import { notifySalesGroup, type SalesNotifyResult } from './openwa.service.js';
 import { applyOrderReservation, consumeOrderSale, releaseOrderReservation, restoreOrderSale } from './stock.service.js';
@@ -350,10 +351,13 @@ export type UpdateOrderInput = {
   city?: string | null;
   carrier?: string | null;
   shippingCostPyg?: number | null;
+  shippingIvaTreatment?: IvaTreatment;
 };
 
+const SHIPPING_ONLY_KEYS = new Set(['shippingCostPyg', 'shippingIvaTreatment']);
+
 function isShippingOnlyPatch(input: UpdateOrderInput): boolean {
-  return Object.entries(input).every(([key, value]) => value === undefined || key === 'shippingCostPyg');
+  return Object.entries(input).every(([key, value]) => value === undefined || SHIPPING_ONLY_KEYS.has(key));
 }
 
 function isInvoiceOnlyPatch(input: UpdateOrderInput): boolean {
@@ -368,7 +372,11 @@ function parseInvoiceOrBadRequest(raw: string): string {
   }
 }
 
-export async function updateShippingCost(id: string, shippingCostPyg: number | null) {
+export async function updateShippingCost(
+  id: string,
+  shippingCostPyg: number | null,
+  shippingIvaTreatment?: IvaTreatment,
+) {
   const order = await prisma.order.findUnique({ where: { id }, include: orderInclude });
   if (!order) notFound('Pedido');
   if (!canEditShippingCost(asStatus(order.status))) {
@@ -376,13 +384,14 @@ export async function updateShippingCost(id: string, shippingCostPyg: number | n
   }
   const next =
     shippingCostPyg == null ? null : Math.max(0, Math.round(shippingCostPyg));
+  const treatment = shippingIvaTreatment ?? order.shippingIvaTreatment;
   const updated = await prisma.$transaction(async (tx) => {
     const row = await tx.order.update({
       where: { id },
-      data: { shippingCostPyg: next },
+      data: { shippingCostPyg: next, shippingIvaTreatment: treatment },
       include: orderInclude,
     });
-    await postShippingCost(tx, id, next, new Date());
+    await postShippingCost(tx, id, next, new Date(), treatment);
     return row;
   });
   return presentOrder(updated);
@@ -573,13 +582,18 @@ export async function updateOrder(id: string, input: UpdateOrderInput) {
               ? null
               : Math.max(0, Math.round(input.shippingCostPyg))
             : undefined,
+        shippingIvaTreatment: input.shippingIvaTreatment,
       },
       include: orderInclude,
     });
-    if (input.shippingCostPyg !== undefined) {
+    if (input.shippingCostPyg !== undefined || input.shippingIvaTreatment !== undefined) {
       const next =
-        input.shippingCostPyg == null ? null : Math.max(0, Math.round(input.shippingCostPyg));
-      await postShippingCost(tx, id, next, new Date());
+        input.shippingCostPyg !== undefined
+          ? input.shippingCostPyg == null
+            ? null
+            : Math.max(0, Math.round(input.shippingCostPyg))
+          : order.shippingCostPyg;
+      await postShippingCost(tx, id, next, new Date(), updatedOrder.shippingIvaTreatment);
     }
     if (
       updatedOrder.status === OrderStatus.CERRADO &&
@@ -616,6 +630,7 @@ export async function transitionOrder(
   payment?: PaymentInput,
   shippingCostPyg?: number,
   invoiceNumber?: string | null,
+  shippingIvaTreatment?: IvaTreatment,
 ) {
   const order = await prisma.order.findUnique({ where: { id }, include: orderInclude });
   if (!order) notFound('Pedido');
@@ -639,6 +654,7 @@ export async function transitionOrder(
   }
 
   const freight = shippingCostPyg !== undefined ? shippingCostPyg : order.shippingCostPyg;
+  const freightIvaTreatment = shippingIvaTreatment ?? order.shippingIvaTreatment;
   if (action === 'close') {
     try {
       assertShippingLoadedForClose(freight);
@@ -679,8 +695,8 @@ export async function transitionOrder(
       await unwindOrder(tx, order, 'DEVOLUCION');
     }
     if (action === 'close') {
-      await tx.order.update({ where: { id }, data: { shippingCostPyg: freight } });
-      await postShippingCost(tx, id, freight, new Date());
+      await tx.order.update({ where: { id }, data: { shippingCostPyg: freight, shippingIvaTreatment: freightIvaTreatment } });
+      await postShippingCost(tx, id, freight, new Date(), freightIvaTreatment);
       await releaseOrderReservation(tx, id);
       const items = presentItems(order);
       const consumed = await consumeOrderSale(tx, id, items);
@@ -756,7 +772,7 @@ export async function setOrderStatus(id: string, next: OrderStatus) {
       } catch (err) {
         badRequest(err instanceof Error ? err.message : 'Para cerrar el pedido hay que cargar el costo de envío');
       }
-      await postShippingCost(tx, id, order.shippingCostPyg, new Date());
+      await postShippingCost(tx, id, order.shippingCostPyg, new Date(), order.shippingIvaTreatment);
       await releaseOrderReservation(tx, id);
       const consumed = await consumeOrderSale(tx, id, presentItems(order));
       await postOrderClose(tx, {

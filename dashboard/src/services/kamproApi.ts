@@ -276,6 +276,7 @@ export type KamproOrder = {
   city: string | null;
   carrier: string | null;
   shippingCostPyg: number | null;
+  shippingIvaTreatment: 'IVA_10' | 'IVA_5' | 'EXENTA';
   invoiceNumber: string | null;
   invoiceIssuer: string | null;
   invoiceIssuedAt: string | null;
@@ -343,6 +344,7 @@ export type UpdateOrderPayload = {
   city?: string | null;
   carrier?: string | null;
   shippingCostPyg?: number | null;
+  shippingIvaTreatment?: 'IVA_10' | 'IVA_5' | 'EXENTA';
 };
 
 export function actionNeedsPayment(order: KamproOrder, action: OrderAction): boolean {

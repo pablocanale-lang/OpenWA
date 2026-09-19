@@ -126,6 +126,9 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
   const [closeShipping, setCloseShipping] = useState(
     order.shippingCostPyg != null ? String(order.shippingCostPyg) : '',
   );
+  const [closeShippingIvaTreatment, setCloseShippingIvaTreatment] = useState<OrderLineIvaTreatment>(
+    order.shippingIvaTreatment,
+  );
 
   useEffect(() => {
     setForm(hydrateFromOrder(order));
@@ -140,8 +143,9 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         : null,
     );
     setCloseShipping(order.shippingCostPyg != null ? String(order.shippingCostPyg) : '');
+    setCloseShippingIvaTreatment(order.shippingIvaTreatment);
     setInvoiceNumber(order.invoiceNumber ?? order.suggestedInvoiceNumber ?? '');
-  }, [order.id, order.updatedAt, order.status, order.totalAmount, order.locationText, order.shippingCostPyg, order.invoiceNumber, order.suggestedInvoiceNumber]);
+  }, [order.id, order.updatedAt, order.status, order.totalAmount, order.locationText, order.shippingCostPyg, order.shippingIvaTreatment, order.invoiceNumber, order.suggestedInvoiceNumber]);
 
   useEffect(() => {
     if (order.zone !== 'ASUNCION' || detailsLocked) return;
@@ -193,6 +197,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
       if (order.canEditShipping) {
         const shipping = parsePygInput(closeShipping);
         payload.shippingCostPyg = closeShipping.trim() === '' || !Number.isFinite(shipping) ? null : shipping;
+        payload.shippingIvaTreatment = closeShippingIvaTreatment;
       }
       await kamproFetch(`/orders/${order.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
       await invalidate();
@@ -226,7 +231,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
                 },
               }
             : {}),
-          ...(action === 'close' ? { shippingCostPyg } : {}),
+          ...(action === 'close' ? { shippingCostPyg, shippingIvaTreatment: closeShippingIvaTreatment } : {}),
           ...(order.primaryAction && actionIssuesInvoice(order, action) && invoiceNumber.trim()
             ? { invoiceNumber: invoiceNumber.trim() }
             : {}),
@@ -434,6 +439,21 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         </label>
       )}
 
+      {order.canEditShipping && (
+        <label>
+          {t('orders.fields.ivaTreatment')}
+          <select
+            value={closeShippingIvaTreatment}
+            disabled={!canWrite}
+            onChange={e => setCloseShippingIvaTreatment(e.target.value as OrderLineIvaTreatment)}
+          >
+            <option value="IVA_10">{t('orders.ivaTreatment.IVA_10')}</option>
+            <option value="IVA_5">{t('orders.ivaTreatment.IVA_5')}</option>
+            <option value="EXENTA">{t('orders.ivaTreatment.EXENTA')}</option>
+          </select>
+        </label>
+      )}
+
       {canWrite && order.canEditDetails !== false && (
         <button type="button" className="btn-secondary" disabled={saving} onClick={() => void saveDetails()}>
           {saving ? <Loader2 className="animate-spin" size={16} /> : null}
@@ -552,6 +572,17 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
               onChange={e => setCloseShipping(e.target.value)}
               placeholder="25000"
             />
+          </label>
+          <label>
+            {t('orders.fields.ivaTreatment')}
+            <select
+              value={closeShippingIvaTreatment}
+              onChange={e => setCloseShippingIvaTreatment(e.target.value as OrderLineIvaTreatment)}
+            >
+              <option value="IVA_10">{t('orders.ivaTreatment.IVA_10')}</option>
+              <option value="IVA_5">{t('orders.ivaTreatment.IVA_5')}</option>
+              <option value="EXENTA">{t('orders.ivaTreatment.EXENTA')}</option>
+            </select>
           </label>
         </div>
       </Modal>

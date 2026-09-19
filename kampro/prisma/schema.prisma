@@ -408,6 +408,9 @@ model Order {
   carrier          String?
   /// Costo de envío (encomienda / delivery / combustible), en PYG. Se carga en Pedidos cuando está ENVIADO.
   shippingCostPyg  Int?
+  /// Tratamiento de IVA del costo de envío (mismo criterio que OrderLine.ivaTreatment). Default
+  /// IVA_10 = comportamiento histórico (splitIva11 sobre el costo de envío).
+  shippingIvaTreatment OrderLineIvaTreatment @default(IVA_10)
   invoiceNumber    String?
   invoiceIssuer    String?
   invoiceIssuedAt  DateTime?
