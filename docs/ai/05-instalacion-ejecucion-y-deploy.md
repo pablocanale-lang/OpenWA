@@ -142,16 +142,67 @@ services:
 
 ### 4. Desplegar Kampro CRM
 
-[PENDIENTE] No hay Dockerfile ni systemd unit para Kampro en el repo. Opciones manuales actuales:
+[CONFIRMADO] Relevado en el VPS el 2026-09-19. Kampro corre como **servicio systemd** (no Docker,
+no pm2), definido en `/etc/systemd/system/kampro.service`:
 
-- Proceso `pm2`/`systemd` ejecutando `cd /opt/openwa/kampro && npm run start`.
-- Bind mount de `kampro/` en un contenedor Node.js 22 con acceso a `data/kampro.sqlite`.
+```ini
+[Unit]
+Description=Kampro CRM
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/openwa/kampro
+EnvironmentFile=/opt/openwa/kampro/.env
+ExecStart=/usr/bin/npx tsx src/index.ts
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
+```
+
+- `systemctl restart kampro.service` aplica un cambio de código. `systemctl status kampro.service`
+  para ver logs recientes (también quedan en `journalctl -u kampro`).
+- El código llega a `/opt/openwa` **sin git** (no hay `.git` en el servidor): se sincroniza por
+  copia (rsync/scp), no por `git pull`. Ver `scripts/deploy-vps.sh`.
+- Kampro no tiene `prisma/migrations/`; el esquema se aplica con `npx prisma db push` (nunca
+  `migrate deploy`, que fallaría sin historial de migraciones — ver
+  `10-preguntas-abiertas.md`).
+- `kampro/data/kampro.sqlite` vive en el filesystem del host (no en un volumen Docker). Ya hay
+  backups manuales ad-hoc en `kampro/data/backups/kampro.sqlite.pre-<cambio>-<fecha>`.
 
 Asegurar que:
 
 - `OPENWA_BASE_URL` apunte al OpenWA local.
 - `KAMPRO_API_KEY` y `OPENWA_API_KEY` estén seteados.
 - El dashboard pueda llegar a Kampro (proxy inverso o red Docker compartida).
+
+### 5. Nota sobre los datos de OpenWA en producción
+
+[CONFIRMADO] A diferencia de lo que sugiere este documento más arriba, en el VPS **no existe**
+`/opt/openwa/data` como carpeta del host: `openwa.sqlite`, `main.sqlite`, la sesión de WhatsApp
+(`sessions/`, LocalAuth de `pcc`), `media/` y `plugins/` viven dentro de un **volumen Docker con
+nombre** (`openwa_openwa-data`) montado en `/app/data` dentro del contenedor `openwa-api`. Un
+backup del host no ve esos archivos; hay que entrar al volumen (`docker exec`/`docker cp`) o
+correr `scripts/backup.sh` **dentro** del contenedor (que ya resuelve todo esto correctamente).
+`DATABASE_TYPE` está comentado en el `.env` de producción → SQLite por defecto; no hay contenedor
+de Postgres corriendo pese a que este documento lo recomienda para producción.
+
+### 6. Script de deploy automatizado
+
+[CONFIRMADO] `scripts/deploy-vps.sh` (2026-09-19) automatiza: tests locales → backup remoto
+(OpenWA vía `scripts/backup.sh` dentro del contenedor + `kampro.sqlite` + `docker-compose.override.yml`)
+→ sync de código (`git archive` + `scp` + `rsync` del lado remoto, protegiendo `.env`,
+`kampro/.env`, `data/`, `node_modules/`, `.git/`, `*.sqlite*`, y **`hotfix/`** — un parche
+solo-servidor, no versionado en este repo, que mantiene `READY_RECONCILE_TIMEOUT_MS=300_000` y
+evita la recarga de WhatsApp Web a mitad de sync; ver `.cursor/rules/openwa-vps-headed.mdc`) →
+`prisma db push` en Kampro si cambió → `systemctl restart kampro.service` y/o reconstrucción del
+contenedor `openwa-api` (solo si hay cambios fuera de `kampro/`) → healthcheck de `/health` de
+ambos servicios y del estado de la sesión `pcc`. No borra archivos en el servidor salvo que se
+pase `--prune` explícitamente, y nunca hace rollback automático de la sesión de WhatsApp.
 
 ## Pasos manuales no automatizados
 
