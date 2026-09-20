@@ -232,6 +232,7 @@ export async function postShippingCost(
   amountPyg: number | null,
   datedAt: Date,
   ivaTreatment: IvaTreatment = 'IVA_10',
+  treasury: Treasury = 'BANCO',
 ) {
   if (amountPyg == null || amountPyg < 1) {
     await reverseActive(tx, JournalSource.ORDER, orderId, 'SHIPPING', datedAt);
@@ -245,7 +246,7 @@ export async function postShippingCost(
     sourceType: JournalSource.ORDER,
     sourceId: orderId,
     event: 'SHIPPING',
-    lines: linesShippingPaid(amountPyg, text, ivaTreatment),
+    lines: linesShippingPaid(amountPyg, text, ivaTreatment, treasury),
   });
 }
 

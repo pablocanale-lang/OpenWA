@@ -86,12 +86,17 @@ export function linesCogs(totalCostPyg: number, memo: string, productId?: string
   ]);
 }
 
-export function linesShippingPaid(gross: number, memo: string, ivaTreatment: IvaTreatment = 'IVA_10'): DraftLine[] {
+export function linesShippingPaid(
+  gross: number,
+  memo: string,
+  ivaTreatment: IvaTreatment = 'IVA_10',
+  treasury: Treasury = 'BANCO',
+): DraftLine[] {
   const { net, iva } = splitByTreatment(gross, ivaTreatment);
   return compactDraftLines([
     t('FLETE_VENTAS', net, 0, memo),
     t('IVA_CREDITO', iva, 0, memo),
-    t('CAJA', 0, gross, memo),
+    t(treasuryRole(treasury), 0, gross, memo),
   ]);
 }
 

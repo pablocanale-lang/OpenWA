@@ -1200,7 +1200,8 @@
       "settlement": "Invoice terms",
       "cashSale": "Cash",
       "creditSale": "Credit",
-      "ivaTreatment": "VAT"
+      "ivaTreatment": "VAT",
+      "treasury": "Paid from"
     },
     "closeShippingHint": "Closing requires the shipping cost Kampro paid. That amount posts the freight journal entry.",
     "closeShippingRequired": "Enter the shipping cost to close the order",
@@ -1281,6 +1282,10 @@
       "IVA_10": "VAT 10%",
       "IVA_5": "VAT 5%",
       "EXENTA": "Exempt"
+    },
+    "treasury": {
+      "CAJA": "Cash",
+      "BANCO": "Bank"
     }
   },
   "inventory": {

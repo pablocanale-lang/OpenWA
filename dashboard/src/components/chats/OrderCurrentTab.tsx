@@ -13,6 +13,7 @@ import {
   type OrderAction,
   type PaymentMethod,
   type InvoiceSettlement,
+  type TreasuryAccount,
   type UpdateOrderPayload,
 } from '../../services/kamproApi';
 import { latestIncomingLocation, type LocationPin } from '../../utils/chatLocation';
@@ -129,6 +130,9 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
   const [closeShippingIvaTreatment, setCloseShippingIvaTreatment] = useState<OrderLineIvaTreatment>(
     order.shippingIvaTreatment,
   );
+  const [closeShippingTreasury, setCloseShippingTreasury] = useState<TreasuryAccount>(
+    order.shippingTreasury,
+  );
 
   useEffect(() => {
     setForm(hydrateFromOrder(order));
@@ -144,8 +148,9 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
     );
     setCloseShipping(order.shippingCostPyg != null ? String(order.shippingCostPyg) : '');
     setCloseShippingIvaTreatment(order.shippingIvaTreatment);
+    setCloseShippingTreasury(order.shippingTreasury);
     setInvoiceNumber(order.invoiceNumber ?? order.suggestedInvoiceNumber ?? '');
-  }, [order.id, order.updatedAt, order.status, order.totalAmount, order.locationText, order.shippingCostPyg, order.shippingIvaTreatment, order.invoiceNumber, order.suggestedInvoiceNumber]);
+  }, [order.id, order.updatedAt, order.status, order.totalAmount, order.locationText, order.shippingCostPyg, order.shippingIvaTreatment, order.shippingTreasury, order.invoiceNumber, order.suggestedInvoiceNumber]);
 
   useEffect(() => {
     if (order.zone !== 'ASUNCION' || detailsLocked) return;
@@ -198,6 +203,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         const shipping = parsePygInput(closeShipping);
         payload.shippingCostPyg = closeShipping.trim() === '' || !Number.isFinite(shipping) ? null : shipping;
         payload.shippingIvaTreatment = closeShippingIvaTreatment;
+        payload.shippingTreasury = closeShippingTreasury;
       }
       await kamproFetch(`/orders/${order.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
       await invalidate();
@@ -231,7 +237,9 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
                 },
               }
             : {}),
-          ...(action === 'close' ? { shippingCostPyg, shippingIvaTreatment: closeShippingIvaTreatment } : {}),
+          ...(action === 'close'
+            ? { shippingCostPyg, shippingIvaTreatment: closeShippingIvaTreatment, shippingTreasury: closeShippingTreasury }
+            : {}),
           ...(order.primaryAction && actionIssuesInvoice(order, action) && invoiceNumber.trim()
             ? { invoiceNumber: invoiceNumber.trim() }
             : {}),
@@ -454,6 +462,20 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
         </label>
       )}
 
+      {order.canEditShipping && (
+        <label>
+          {t('orders.fields.treasury')}
+          <select
+            value={closeShippingTreasury}
+            disabled={!canWrite}
+            onChange={e => setCloseShippingTreasury(e.target.value as TreasuryAccount)}
+          >
+            <option value="BANCO">{t('orders.treasury.BANCO')}</option>
+            <option value="CAJA">{t('orders.treasury.CAJA')}</option>
+          </select>
+        </label>
+      )}
+
       {canWrite && order.canEditDetails !== false && (
         <button type="button" className="btn-secondary" disabled={saving} onClick={() => void saveDetails()}>
           {saving ? <Loader2 className="animate-spin" size={16} /> : null}
@@ -582,6 +604,16 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
               <option value="IVA_10">{t('orders.ivaTreatment.IVA_10')}</option>
               <option value="IVA_5">{t('orders.ivaTreatment.IVA_5')}</option>
               <option value="EXENTA">{t('orders.ivaTreatment.EXENTA')}</option>
+            </select>
+          </label>
+          <label>
+            {t('orders.fields.treasury')}
+            <select
+              value={closeShippingTreasury}
+              onChange={e => setCloseShippingTreasury(e.target.value as TreasuryAccount)}
+            >
+              <option value="BANCO">{t('orders.treasury.BANCO')}</option>
+              <option value="CAJA">{t('orders.treasury.CAJA')}</option>
             </select>
           </label>
         </div>

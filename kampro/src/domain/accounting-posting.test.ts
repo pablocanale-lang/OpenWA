@@ -98,18 +98,24 @@ describe('armado de asientos', () => {
     assert.ok(lines.some((l) => l.role === 'INVENTARIO' && l.credit === 40_000));
   });
 
-  it('flete de venta contra caja, con IVA (default IVA_10)', () => {
+  it('flete de venta contra banco por defecto, con IVA (default IVA_10)', () => {
     const lines = linesShippingPaid(11_000, 'flete');
-    assert.ok(lines.some((l) => l.role === 'CAJA' && l.credit === 11_000));
+    assert.ok(lines.some((l) => l.role === 'BANCO' && l.credit === 11_000));
     assert.ok(lines.some((l) => l.role === 'FLETE_VENTAS' && l.debit === 10_000));
     assert.ok(lines.some((l) => l.role === 'IVA_CREDITO' && l.debit === 1_000));
   });
 
   it('flete EXENTA (transportadora sin RUC propio de Kampro) no toma IVA_CREDITO', () => {
     const lines = linesShippingPaid(31_600, 'flete talonario prestado', 'EXENTA');
-    assert.ok(lines.some((l) => l.role === 'CAJA' && l.credit === 31_600));
+    assert.ok(lines.some((l) => l.role === 'BANCO' && l.credit === 31_600));
     assert.ok(lines.some((l) => l.role === 'FLETE_VENTAS' && l.debit === 31_600));
     assert.ok(!lines.some((l) => l.role === 'IVA_CREDITO'));
+  });
+
+  it('flete se puede elegir contra caja explícitamente', () => {
+    const lines = linesShippingPaid(11_000, 'flete pagado en efectivo', 'IVA_10', 'CAJA');
+    assert.ok(lines.some((l) => l.role === 'CAJA' && l.credit === 11_000));
+    assert.ok(!lines.some((l) => l.role === 'BANCO'));
   });
 
   it('pago de OC pone mercadería en tránsito', () => {

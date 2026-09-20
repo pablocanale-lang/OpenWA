@@ -820,6 +820,7 @@ export async function apiRoutes(app: FastifyInstance) {
           carrier: z.string().nullable().optional(),
           shippingCostPyg: z.number().int().nonnegative().nullable().optional(),
           shippingIvaTreatment: z.enum(['IVA_10', 'IVA_5', 'EXENTA']).optional(),
+          shippingTreasury: z.nativeEnum(TreasuryAccount).optional(),
         })
         .parse(req.body);
       return await orders.updateOrder(id, body);
@@ -835,9 +836,10 @@ export async function apiRoutes(app: FastifyInstance) {
         .object({
           shippingCostPyg: z.number().int().nonnegative().nullable(),
           shippingIvaTreatment: z.enum(['IVA_10', 'IVA_5', 'EXENTA']).optional(),
+          shippingTreasury: z.nativeEnum(TreasuryAccount).optional(),
         })
         .parse(req.body);
-      return await orders.updateShippingCost(id, body.shippingCostPyg, body.shippingIvaTreatment);
+      return await orders.updateShippingCost(id, body.shippingCostPyg, body.shippingIvaTreatment, body.shippingTreasury);
     } catch (err) {
       return sendError(reply, err);
     }
@@ -871,6 +873,7 @@ export async function apiRoutes(app: FastifyInstance) {
           shippingCostPyg: pygAmount.optional(),
           invoiceNumber: z.string().min(1).optional(),
           shippingIvaTreatment: z.enum(['IVA_10', 'IVA_5', 'EXENTA']).optional(),
+          shippingTreasury: z.nativeEnum(TreasuryAccount).optional(),
         })
         .parse(req.body);
       return await orders.transitionOrder(
@@ -880,6 +883,7 @@ export async function apiRoutes(app: FastifyInstance) {
         body.shippingCostPyg,
         body.invoiceNumber,
         body.shippingIvaTreatment,
+        body.shippingTreasury,
       );
     } catch (err) {
       return sendError(reply, err);

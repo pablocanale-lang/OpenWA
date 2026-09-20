@@ -1194,7 +1194,8 @@
       "settlement": "Condición de factura",
       "cashSale": "Contado",
       "creditSale": "Crédito",
-      "ivaTreatment": "IVA"
+      "ivaTreatment": "IVA",
+      "treasury": "Pagado desde"
     },
     "closeShippingHint": "Para cerrar hay que cargar lo que se gastó en el envío. Con ese monto se genera el asiento de flete.",
     "closeShippingRequired": "Cargá el costo de envío para cerrar el pedido",
@@ -1266,6 +1267,10 @@
       "IVA_10": "IVA 10%",
       "IVA_5": "IVA 5%",
       "EXENTA": "Exenta"
+    },
+    "treasury": {
+      "CAJA": "Caja",
+      "BANCO": "Banco"
     }
   },
   "inventory": {
