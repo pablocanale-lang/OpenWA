@@ -245,11 +245,16 @@ COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.override.yml)
 # invocado como `bash script.sh` (no exec directo, no `sh`): la imagen copia backup.sh sin bit
 # +x, y el propio script usa `set -o pipefail` (bash-only) -- /bin/sh del contenedor es dash y
 # no soporta esa opción ("Illegal option -o pipefail").
-"${COMPOSE[@]}" exec -T openwa-api bash -c 'mkdir -p /app/data/.deploy-backups && BACKUP_DIR=/app/data/.deploy-backups bash /app/scripts/backup.sh'
-ARCHIVE="$("${COMPOSE[@]}" exec -T openwa-api sh -c 'ls -1t /app/data/.deploy-backups' | head -n1 | tr -d '\r')"
+# `< /dev/null` en cada `exec -T`: sin esto, el proceso hereda el stdin del propio heredoc SSH
+# que está ejecutando este script (docker compose exec mantiene stdin abierto por defecto), y
+# puede consumir bytes del resto del script remoto aún sin leerlos activamente -- corrompiendo
+# el parseo de las líneas siguientes de forma silenciosa (sin error, sin abortar). Confirmado:
+# esto hizo desaparecer el bloque de verificación de abajo en una corrida real.
+"${COMPOSE[@]}" exec -T openwa-api bash -c 'mkdir -p /app/data/.deploy-backups && BACKUP_DIR=/app/data/.deploy-backups bash /app/scripts/backup.sh' < /dev/null
+ARCHIVE="$("${COMPOSE[@]}" exec -T openwa-api sh -c 'ls -1t /app/data/.deploy-backups' < /dev/null | head -n1 | tr -d '\r')"
 [ -n "$ARCHIVE" ] || { echo "no se encontró el archivo de backup generado" >&2; exit 1; }
 
-SRC_SIZE="$("${COMPOSE[@]}" exec -T openwa-api stat -c%s "/app/data/.deploy-backups/$ARCHIVE" | tr -d '\r')"
+SRC_SIZE="$("${COMPOSE[@]}" exec -T openwa-api stat -c%s "/app/data/.deploy-backups/$ARCHIVE" < /dev/null | tr -d '\r')"
 
 # Verificación explícita: en una corrida real, `docker cp` de un archivo de ~400MB devolvió
 # éxito (set -e no abortó) pero el archivo nunca apareció (o quedó incompleto) en destino, sin
@@ -273,7 +278,7 @@ if [ "$ok" -ne 1 ]; then
 fi
 echo "openwa backup ok: $DEST/$ARCHIVE ($GOT_SIZE bytes)"
 # Rotación: conservar solo los últimos 5 backups dentro del volumen (no en $DEST, ese lo administra el operador).
-"${COMPOSE[@]}" exec -T openwa-api sh -c 'cd /app/data/.deploy-backups && ls -1t | tail -n +6 | xargs -r rm -f --'
+"${COMPOSE[@]}" exec -T openwa-api sh -c 'cd /app/data/.deploy-backups && ls -1t | tail -n +6 | xargs -r rm -f --' < /dev/null
 REMOTE_EOF
 
 log "  -> Kampro: copiando kampro.sqlite ..."
@@ -391,7 +396,7 @@ if [ "$ok" -ne 1 ]; then
 fi
 
 echo "chequeando sesión $SESSION_ID (sin imprimir la API key) ..."
-KEY="$("${COMPOSE[@]}" exec -T openwa-api cat /app/data/.api-key | tr -d '\r\n')"
+KEY="$("${COMPOSE[@]}" exec -T openwa-api cat /app/data/.api-key < /dev/null | tr -d '\r\n')"
 started=0
 for i in $(seq 1 12); do
   STATUS="$(curl -sS -H "X-API-Key: $KEY" "http://127.0.0.1:2785/api/sessions/$SESSION_ID" | grep -o '"status":"[a-z_]*"' | head -n1 | cut -d'"' -f4 || true)"
@@ -436,7 +441,7 @@ echo "Kampro /health -> $code"
 
 if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' | grep -q '^openwa-api$'; then
   COMPOSE=(docker compose -f /opt/openwa/docker-compose.yml -f /opt/openwa/docker-compose.override.yml)
-  KEY="$("${COMPOSE[@]}" exec -T openwa-api cat /app/data/.api-key 2>/dev/null | tr -d '\r\n' || true)"
+  KEY="$("${COMPOSE[@]}" exec -T openwa-api cat /app/data/.api-key < /dev/null 2>/dev/null | tr -d '\r\n' || true)"
   if [ -n "$KEY" ]; then
     STATUS="$(curl -sS -H "X-API-Key: $KEY" "http://127.0.0.1:2785/api/sessions/$SESSION_ID" | grep -o '"status":"[a-z_]*"' | head -n1 | cut -d'"' -f4 || true)"
     echo "Sesión pcc -> status=$STATUS"
