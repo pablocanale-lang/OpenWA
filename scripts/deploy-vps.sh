@@ -248,12 +248,30 @@ COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.override.yml)
 "${COMPOSE[@]}" exec -T openwa-api bash -c 'mkdir -p /app/data/.deploy-backups && BACKUP_DIR=/app/data/.deploy-backups bash /app/scripts/backup.sh'
 ARCHIVE="$("${COMPOSE[@]}" exec -T openwa-api sh -c 'ls -1t /app/data/.deploy-backups' | head -n1 | tr -d '\r')"
 [ -n "$ARCHIVE" ] || { echo "no se encontró el archivo de backup generado" >&2; exit 1; }
-docker cp "openwa-api:/app/data/.deploy-backups/$ARCHIVE" "$DEST/$ARCHIVE"
+
+SRC_SIZE="$("${COMPOSE[@]}" exec -T openwa-api stat -c%s "/app/data/.deploy-backups/$ARCHIVE" | tr -d '\r')"
+
 # Verificación explícita: en una corrida real, `docker cp` de un archivo de ~400MB devolvió
-# éxito (set -e no abortó) pero el archivo nunca apareció en destino, sin ningún error visible.
-# No confiar en el exit code solo: confirmar que el archivo realmente quedó ahí y no vacío.
-[ -s "$DEST/$ARCHIVE" ] || { echo "ERROR: docker cp no dejó el archivo en $DEST/$ARCHIVE (el backup real quedó en el volumen, no se perdió, pero no se copió afuera)" >&2; exit 1; }
-echo "openwa backup ok: $DEST/$ARCHIVE ($(wc -c < "$DEST/$ARCHIVE") bytes)"
+# éxito (set -e no abortó) pero el archivo nunca apareció (o quedó incompleto) en destino, sin
+# ningún error visible. No confiar en el exit code ni en "no vacío" (un archivo parcial también
+# pasa `-s`): comparar el tamaño exacto contra el de origen dentro del contenedor, con reintentos.
+ok=0
+for attempt in 1 2 3; do
+  rm -f "$DEST/$ARCHIVE"
+  docker cp "openwa-api:/app/data/.deploy-backups/$ARCHIVE" "$DEST/$ARCHIVE" || true
+  GOT_SIZE="$(wc -c < "$DEST/$ARCHIVE" 2>/dev/null || echo 0)"
+  if [ "$GOT_SIZE" = "$SRC_SIZE" ] && [ "$GOT_SIZE" -gt 0 ]; then
+    ok=1
+    break
+  fi
+  echo "  intento $attempt: docker cp dejó $GOT_SIZE/$SRC_SIZE bytes en $DEST/$ARCHIVE; reintentando ..." >&2
+  sleep 3
+done
+if [ "$ok" -ne 1 ]; then
+  echo "ERROR: docker cp no logró copiar el backup completo tras 3 intentos ($DEST/$ARCHIVE, se esperaban $SRC_SIZE bytes). El backup real quedó a salvo en el volumen (/app/data/.deploy-backups/$ARCHIVE dentro del contenedor); rescatalo a mano." >&2
+  exit 1
+fi
+echo "openwa backup ok: $DEST/$ARCHIVE ($GOT_SIZE bytes)"
 # Rotación: conservar solo los últimos 5 backups dentro del volumen (no en $DEST, ese lo administra el operador).
 "${COMPOSE[@]}" exec -T openwa-api sh -c 'cd /app/data/.deploy-backups && ls -1t | tail -n +6 | xargs -r rm -f --'
 REMOTE_EOF
