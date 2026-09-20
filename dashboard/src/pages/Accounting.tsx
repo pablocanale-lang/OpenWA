@@ -53,7 +53,9 @@ function StatementRows({
 }) {
   return (
     <div className="table-wrap">
-      <table>
+      {/* no-zebra: this table colours rows by account type (imputable vs. madre/subtotal), not by
+          position — see the accounting-statement-row rules in Accounting.css. */}
+      <table className="no-zebra">
         <thead>
           <tr>
             <th>{codeLabel}</th>
@@ -63,13 +65,13 @@ function StatementRows({
         </thead>
         <tbody>
           {rows.map(row => (
-            <tr key={row.code}>
+            <tr key={row.code} className="accounting-statement-row accounting-statement-row--imputable">
               <td>{row.code}</td>
               <td>{row.name}</td>
               <td className="num">{formatPyg(row.balance)}</td>
             </tr>
           ))}
-          <tr className="accounting-total">
+          <tr className="accounting-total accounting-statement-row accounting-statement-row--parent">
             <td colSpan={2}>{totalLabel}</td>
             <td className="num">{formatPyg(total)}</td>
           </tr>

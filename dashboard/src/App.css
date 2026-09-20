@@ -32,6 +32,10 @@
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   --radius: 10px;
+  /* Zebra striping for list tables. A tint of the theme's own text colour rather than a fixed
+     hex, so it stays subtle and correctly toned in both light and dark without a separate
+     dark-mode override (mirrors --primary-soft's color-mix approach below). */
+  --zebra-stripe: color-mix(in srgb, var(--text-primary) 5%, transparent);
 }
 
 /* Dark Mode */
@@ -99,6 +103,15 @@
 
 * {
   box-sizing: border-box;
+}
+
+/* Zebra striping for every list table in the dashboard (orders, purchase orders, inventory,
+   payments, expenses, journal, etc.) — reusable so a new table adopts it automatically without
+   repeating the rule per page. Opt out with .no-zebra on the <table> for views that colour rows
+   by something other than position, e.g. the Estado de Resultados / Balance statement tables in
+   Accounting.css, which colour by account type (subtotal vs detail) instead. */
+table:not(.no-zebra) tbody tr:nth-child(even) {
+  background: var(--zebra-stripe);
 }
 
 body {

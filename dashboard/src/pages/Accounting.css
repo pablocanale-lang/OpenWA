@@ -214,6 +214,19 @@
   color: var(--text-secondary);
 }
 
+/* Estado de Resultados / Balance: color by account type instead of row position (excluded from
+   the global zebra striping via .no-zebra on the <table>, see App.css). "Madre" here means the
+   subtotal/total row per section (.accounting-total already existed for its bold text; this adds
+   a background to match) — the statements only ever list postable (imputable) accounts, so a real
+   parent-account row from the chart of accounts never appears here today. */
+.accounting-page .accounting-statement-row--imputable {
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
+.accounting-page .accounting-statement-row--parent {
+  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+}
+
 @media (max-width: 900px) {
   .accounting-form .form-grid,
   .accounting-cash-summary,
