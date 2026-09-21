@@ -306,6 +306,8 @@ export type CreateOrderLinePayload = {
   discountApplied: number;
   unitPricePyg: number;
   ivaTreatment?: 'IVA_10' | 'IVA_5' | 'EXENTA';
+  /// Si viene, manda sobre discountApplied (ver kampro/src/domain/order-pricing.ts).
+  finalPricePyg?: number;
 };
 
 export type CreateOrderPayload = {

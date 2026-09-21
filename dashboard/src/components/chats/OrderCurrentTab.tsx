@@ -185,6 +185,7 @@ export function OrderCurrentTab({ order, products, sessionId, chat, messages }: 
           discountApplied: line.discount,
           unitPricePyg: line.unitPrice,
           ivaTreatment: line.ivaTreatment,
+          ...(line.finalPrice != null && line.finalPrice > 0 ? { finalPricePyg: line.finalPrice } : {}),
         }));
       }
       if (order.zone === 'ASUNCION') {

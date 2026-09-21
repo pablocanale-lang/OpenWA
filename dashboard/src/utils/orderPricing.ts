@@ -10,6 +10,14 @@ export function quoteTotalPyg(unitPricePyg: number, quantity: number, discountPe
   return Math.round(unitPricePyg * quantity * (1 - pct / 100));
 }
 
+/** Espejo de kampro/src/domain/order-pricing.ts — ver ahí el porqué (discountApplied es Int). */
+export function discountPercentForFinalPrice(unitPricePyg: number, quantity: number, finalPricePyg: number): number {
+  const listTotal = unitPricePyg * quantity;
+  if (!Number.isFinite(listTotal) || listTotal <= 0) return 0;
+  const pct = (1 - finalPricePyg / listTotal) * 100;
+  return Math.round(Math.min(100, Math.max(0, pct)));
+}
+
 export function formatPyg(amount: number): string {
   return `${new Intl.NumberFormat('es-PY').format(amount)} Gs`;
 }
@@ -37,13 +45,18 @@ export type OrderLineDraft = {
   discount: number;
   unitPrice: number;
   ivaTreatment: OrderLineIvaTreatment;
+  /// Precio final opcional: si está cargado, manda sobre `discount` (ver discountPercentForFinalPrice).
+  finalPrice?: number;
 };
 
-export function lineTotalPyg(line: Pick<OrderLineDraft, 'unitPrice' | 'quantity' | 'discount'>): number {
+export function lineTotalPyg(line: Pick<OrderLineDraft, 'unitPrice' | 'quantity' | 'discount' | 'finalPrice'>): number {
+  if (line.finalPrice != null && line.finalPrice > 0) return Math.round(line.finalPrice);
   return quoteTotalPyg(line.unitPrice, line.quantity, line.discount);
 }
 
-export function quoteLinesTotalPyg(lines: Array<Pick<OrderLineDraft, 'unitPrice' | 'quantity' | 'discount'>>): number {
+export function quoteLinesTotalPyg(
+  lines: Array<Pick<OrderLineDraft, 'unitPrice' | 'quantity' | 'discount' | 'finalPrice'>>,
+): number {
   return lines.reduce((sum, line) => sum + lineTotalPyg(line), 0);
 }
 

@@ -182,8 +182,22 @@ export function OrderProductLines({ products, lines, disabled, onChange }: Props
                       min={0}
                       max={100}
                       value={line.discount}
-                      disabled={disabled}
+                      disabled={disabled || line.finalPrice != null}
                       onChange={e => updateLine(line.key, { discount: Number(e.target.value) || 0 })}
+                    />
+                  </label>
+                  <label>
+                    {t('orders.fields.finalPrice')}
+                    <input
+                      type="number"
+                      min={1}
+                      placeholder={t('orders.fields.finalPricePlaceholder')}
+                      value={line.finalPrice ?? ''}
+                      disabled={disabled}
+                      onChange={e => {
+                        const raw = e.target.value;
+                        updateLine(line.key, { finalPrice: raw === '' ? undefined : Number(raw) || undefined });
+                      }}
                     />
                   </label>
                   <label>
@@ -203,7 +217,12 @@ export function OrderProductLines({ products, lines, disabled, onChange }: Props
                   {t('orders.fields.unitPrice')}: {formatPyg(line.unitPrice)}
                 </p>
                 <p className="order-quick-panel__quote">{formatPyg(lineTotalPyg(line))}</p>
-                {line.quantity !== 2 && <p className="order-quick-panel__hint">{t('orders.discountHint')}</p>}
+                {line.finalPrice != null && line.finalPrice > 0 && (
+                  <p className="order-quick-panel__hint">{t('orders.finalPriceHint')}</p>
+                )}
+                {line.quantity !== 2 && line.finalPrice == null && (
+                  <p className="order-quick-panel__hint">{t('orders.discountHint')}</p>
+                )}
                 {missingPrice && <p className="order-quick-panel__hint">{t('orders.noCatalogPrice')}</p>}
                 {product && line.quantity > (product.availableQty ?? product.stockQty) && (
                   <p className="order-quick-panel__hint">{t('orders.stockShortfall', { have: product.availableQty ?? product.stockQty })}</p>

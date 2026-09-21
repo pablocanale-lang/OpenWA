@@ -1,4 +1,4 @@
-import { discountPercentForQty, quoteTotalPyg } from '../domain/order-pricing.js';
+import { discountPercentForFinalPrice, discountPercentForQty, quoteTotalPyg } from '../domain/order-pricing.js';
 import { resolveIvaTreatment, type IvaTreatment } from '../domain/iva.js';
 import { badRequest } from '../http-error.js';
 import { prisma } from '../db.js';
@@ -10,6 +10,9 @@ export type OrderLineInput = {
   unitPricePyg?: number;
   /// Default IVA_10 (comportamiento histórico) cuando no se especifica.
   ivaTreatment?: IvaTreatment;
+  /// Si viene, manda sobre discountApplied: el precio final de la línea se fija a este monto y
+  /// el % de descuento se calcula solo (solo informativo — ver discountPercentForFinalPrice).
+  finalPricePyg?: number;
 };
 
 export type ResolvedOrderLine = {
@@ -60,15 +63,24 @@ export async function resolveOrderLines(input: {
     if (!product) badRequest(`SKU desconocido: ${row.sku}`);
     const quantity = Math.round(row.quantity);
     if (!Number.isFinite(quantity) || quantity < 1) badRequest('La cantidad debe ser al menos 1');
-    const discountApplied =
-      row.discountApplied !== undefined ? Math.round(row.discountApplied) : discountPercentForQty(quantity);
-    if (discountApplied < 0 || discountApplied > 100) badRequest('Descuento inválido');
     const unitPricePyg = product.unitPricePyg;
     if (unitPricePyg == null || unitPricePyg < 1) {
       badRequest(`Falta el precio de venta en Inventario para ${product.sku}`);
     }
     if (product.status !== 'ACTIVE') badRequest(`El producto ${product.sku} está inactivo`);
-    const lineTotal = quoteTotalPyg(unitPricePyg, quantity, discountApplied);
+
+    let discountApplied: number;
+    let lineTotal: number;
+    if (row.finalPricePyg !== undefined) {
+      const finalPricePyg = Math.round(row.finalPricePyg);
+      if (finalPricePyg < 1) badRequest('El precio final debe ser mayor a 0');
+      discountApplied = discountPercentForFinalPrice(unitPricePyg, quantity, finalPricePyg);
+      lineTotal = finalPricePyg;
+    } else {
+      discountApplied = row.discountApplied !== undefined ? Math.round(row.discountApplied) : discountPercentForQty(quantity);
+      if (discountApplied < 0 || discountApplied > 100) badRequest('Descuento inválido');
+      lineTotal = quoteTotalPyg(unitPricePyg, quantity, discountApplied);
+    }
     const ivaTreatment = resolveIvaTreatment({ ivaTreatment: row.ivaTreatment });
     lines.push({
       sku: product.sku,

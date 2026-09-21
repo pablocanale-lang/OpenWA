@@ -10,6 +10,19 @@ export function quoteTotalPyg(unitPricePyg: number, quantity: number, discountPe
   return Math.round(unitPricePyg * quantity * (1 - pct / 100));
 }
 
+/**
+ * % de descuento entero más cercano al que hace falta para llegar a `finalPricePyg` desde el
+ * precio de lista (unitPricePyg × quantity). Es solo informativo/de reporte — `finalPricePyg` es
+ * el monto que realmente se cobra, no el que resulta de aplicar este % (discountApplied es Int,
+ * así que un % exacto no siempre existe: ej. 640.000 -> 600.000 necesita 6,25%, redondea a 6%).
+ */
+export function discountPercentForFinalPrice(unitPricePyg: number, quantity: number, finalPricePyg: number): number {
+  const listTotal = unitPricePyg * quantity;
+  if (!Number.isFinite(listTotal) || listTotal <= 0) return 0;
+  const pct = (1 - finalPricePyg / listTotal) * 100;
+  return Math.round(Math.min(100, Math.max(0, pct)));
+}
+
 export function formatPyg(amount: number): string {
   return `${new Intl.NumberFormat('es-PY').format(amount)} Gs`;
 }

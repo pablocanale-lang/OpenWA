@@ -725,6 +725,10 @@ export async function apiRoutes(app: FastifyInstance) {
     discountApplied: z.number().min(0).max(100).optional(),
     unitPricePyg: z.number().int().nonnegative().optional(),
     ivaTreatment: z.enum(['IVA_10', 'IVA_5', 'EXENTA']).optional(),
+    /// Precio final de la línea (Gs). Si viene, manda sobre discountApplied: el descuento
+    /// equivalente se calcula solo (ver domain/order-pricing.ts), sin depender de que un %
+    /// entero llegue exacto al monto acordado.
+    finalPricePyg: z.number().int().positive().optional(),
   });
 
   app.get('/invoices/next', async (_req, reply) => {

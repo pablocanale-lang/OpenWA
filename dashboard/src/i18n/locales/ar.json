@@ -1201,7 +1201,9 @@
       "cashSale": "Cash",
       "creditSale": "Credit",
       "ivaTreatment": "VAT",
-      "treasury": "Paid from"
+      "treasury": "Paid from",
+      "finalPrice": "Final price (Gs)",
+      "finalPricePlaceholder": "Optional, e.g. 600000"
     },
     "closeShippingHint": "Closing requires the shipping cost Kampro paid. That amount posts the freight journal entry.",
     "closeShippingRequired": "Enter the shipping cost to close the order",
@@ -1286,7 +1288,8 @@
     "treasury": {
       "CAJA": "Cash",
       "BANCO": "Bank"
-    }
+    },
+    "finalPriceHint": "Final price overrides the discount: the % is calculated automatically, for reference only."
   },
   "inventory": {
     "subtitle": "Available units and sale prices. Orders take the price from here and deduct stock on create. Cancel, refund or return puts units back.",
